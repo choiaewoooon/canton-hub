@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { width: 800px; background: #0c0c20; }
+
+  body {
+    width: 800px;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: linear-gradient(145deg, #0c0c20 0%, #12123a 40%, #0e0e28 100%);
+    color: #d0d0e0;
+    padding: 24px 32px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: absolute;
+    top: -100px; right: -100px;
+    width: 350px; height: 350px;
+    background: radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 1;
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .profile-pic {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 2px solid rgba(99,102,241,0.4);
+  }
+  .header h1 { font-size: 20px; font-weight: 800; color: #ffffff; }
+  .header h1 span { color: #6366f1; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .canton-logo { width: 28px; height: 28px; border-radius: 6px; }
+  .header .date { font-size: 13px; color: #777; font-weight: 500; }
+
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, #6366f1, rgba(99,102,241,0.05));
+    margin-bottom: 20px;
+  }
+
+  .content { display: flex; gap: 32px; position: relative; z-index: 1; }
+  .section { flex: 1; }
+  .section-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 2px; color: #777; margin-bottom: 12px;
+  }
+
+  .price-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .price-main { font-size: 34px; font-weight: 800; color: #fff; letter-spacing: -1px; }
+  .price-change { font-size: 14px; font-weight: 700; padding: 3px 8px; border-radius: 4px; }
+  .price-change.up { color: #00d68f; background: rgba(0,214,143,0.15); }
+  .price-change.down { color: #ff5a5a; background: rgba(255,90,90,0.15); }
+  .price-range { font-size: 12px; color: #888; margin-bottom: 8px; }
+
+  .chart-container { margin-bottom: 4px; border-radius: 6px; overflow: hidden; }
+  .chart-container img { width: 100%; display: block; }
+
+  .stat-grid { display: flex; flex-direction: column; gap: 8px; }
+  .stat-item { display: flex; justify-content: space-between; align-items: center; }
+  .stat-label { font-size: 12px; color: #888; }
+  .stat-value { font-size: 13px; color: #ddd; font-weight: 600; }
+
+  .ratio-box {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 12px 16px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .ratio-number { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+  .ratio-number.def { color: #00d68f; }
+  .ratio-number.inf { color: #ff5a5a; }
+  .ratio-meta { font-size: 11px; color: #888; line-height: 1.5; }
+  .ratio-meta strong { color: #bbb; font-weight: 600; }
+
+  .flow-row { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 12px; font-weight: 600; }
+  .tag { padding: 4px 10px; border-radius: 5px; }
+  .tag.mint { background: rgba(0,214,143,0.12); color: #00d68f; }
+  .tag.burn { background: rgba(255,90,90,0.12); color: #ff5a5a; }
+  .flow-arrow { color: #444; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <img class="profile-pic" src="{{ profile_b64 }}" alt="">
+    <h1><span>Canton</span> Daily</h1>
+  </div>
+  <div class="header-right">
+    <span class="date">{{ date_str }}</span>
+    <img class="canton-logo" src="{{ logo_b64 }}" alt="">
+  </div>
+</div>
+<div class="divider"></div>
+
+<div class="content">
+  <div class="section">
+    <div class="section-title">$CC Price</div>
+    {% if price.fetched %}
+    <div class="price-row">
+      <div class="price-main">{{ price_usd }}</div>
+      <div class="price-change {{ 'up' if price_change_pct >= 0 else 'down' }}">
+        {{ '%+.2f' | format(price_change_pct) }}%
+      </div>
+    </div>
+    <div class="price-range">24h {{ low_24h }} — {{ high_24h }}</div>
+    {% if chart_b64 %}
+    <div class="chart-container">
+      <img src="data:image/png;base64,{{ chart_b64 }}" alt="24h chart">
+    </div>
+    {% endif %}
+    {% else %}
+    <div style="color:#666; margin-top:20px;">가격 데이터 수집 실패</div>
+    {% endif %}
+  </div>
+
+  <div class="section">
+    <div class="section-title">Network</div>
+    {% if scan.fetched %}
+    <div class="ratio-box">
+      <div class="ratio-number {{ 'def' if bm_ratio >= 1 else 'inf' }}">
+        {{ '%.4f' | format(bm_ratio) }}x
+      </div>
+      <div class="ratio-meta">
+        <strong>B/M Ratio</strong><br>
+        {{ '디플레이션' if bm_ratio >= 1 else '인플레이션' }}
+      </div>
+    </div>
+    <div class="flow-row">
+      <span class="tag mint">Mint {{ mint_cc }}</span>
+      <span class="flow-arrow">→</span>
+      <span class="tag burn">Burn {{ burn_cc }}</span>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-item">
+        <span class="stat-label">App Rewards</span>
+        <span class="stat-value">{{ app_rewards }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Validator</span>
+        <span class="stat-value">{{ val_rewards }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">총 발행</span>
+        <span class="stat-value">{{ total_minted }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">총 소각</span>
+        <span class="stat-value">{{ total_burned }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">누적 소각률</span>
+        <span class="stat-value" style="color:{{ '#00d68f' if cum_burn_ratio >= 5 else '#bbb' }}">{{ '%.2f' | format(cum_burn_ratio) }}%</span>
+      </div>
+    </div>
+    {% else %}
+    <div style="color:#666; margin-top:20px;">네트워크 데이터 수집 실패</div>
+    {% endif %}
+  </div>
+</div>
+
+</body>
+</html>

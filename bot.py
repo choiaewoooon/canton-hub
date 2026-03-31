@@ -11,6 +11,7 @@ import argparse
 import logging
 import sys
 from datetime import datetime
+from io import BytesIO
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -20,6 +21,9 @@ from telegram.constants import ParseMode
 import config
 from collectors import TwitterCollector, CantonScanCollector, PriceCollector
 from formatter import build_daily_report
+from chart_generator import generate_chart_base64
+from image_generator import generate_daily_card
+from tweet_summarizer import summarize_tweets
 
 # ── 로깅 설정 ──
 logging.basicConfig(
@@ -48,16 +52,8 @@ async def collect_and_post():
         # ── 데이터 수집 (병렬) ──
         logger.info("데이터 수집 시작...")
 
-        # 트위터는 30초 타임아웃 (twscrape가 멈출 수 있음)
-        async def collect_tweets_with_timeout():
-            try:
-                return await asyncio.wait_for(twitter.collect_all(), timeout=30)
-            except asyncio.TimeoutError:
-                logger.warning("트위터 수집 타임아웃 (30초). 스킵합니다.")
-                return {}
-
         tweets, scan_data, price_data = await asyncio.gather(
-            collect_tweets_with_timeout(),
+            twitter.collect_all(),
             cantonscan.collect(),
             price.collect(),
             return_exceptions=True,
@@ -76,8 +72,13 @@ async def collect_and_post():
             from collectors import PriceData
             price_data = PriceData()
 
+        # ── 트윗 AI 요약 ──
+        tweet_summary = ""
+        if tweets:
+            tweet_summary = await summarize_tweets(tweets)
+
         # ── 메시지 생성 ──
-        message = build_daily_report(tweets, scan_data, price_data)
+        message = build_daily_report(tweets, scan_data, price_data, tweet_summary)
         logger.info(f"메시지 생성 완료 ({len(message)} chars)")
 
         # ── 텔레그램 전송 ──
@@ -96,12 +97,34 @@ async def collect_and_post():
             logger.error("TELEGRAM_CHANNEL_ID가 설정되지 않았습니다!")
             return
 
-        await bot.send_message(
-            chat_id=config.TELEGRAM_CHANNEL_ID,
-            text=message,
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True,
-        )
+        # 이미지 카드 생성 + 캡션으로 텍스트 포함하여 단일 게시물 전송
+        kst_now = datetime.now(kst)
+        date_str = kst_now.strftime("%Y.%m.%d %a")
+        sent = False
+
+        try:
+            chart_b64 = await generate_chart_base64()
+            image_bytes = await generate_daily_card(scan_data, price_data, date_str, chart_b64)
+            if image_bytes:
+                await bot.send_photo(
+                    chat_id=config.TELEGRAM_CHANNEL_ID,
+                    photo=BytesIO(image_bytes),
+                    caption=message,
+                    parse_mode=ParseMode.HTML,
+                )
+                sent = True
+                logger.info("이미지 + 텍스트 전송 완료")
+        except Exception as e:
+            logger.warning(f"이미지 전송 실패, 텍스트만 전송합니다: {e}")
+
+        # 이미지 실패 시 텍스트만 전송
+        if not sent:
+            await bot.send_message(
+                chat_id=config.TELEGRAM_CHANNEL_ID,
+                text=message,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
 
         logger.info(f"텔레그램 전송 완료 -> {config.TELEGRAM_CHANNEL_ID}")
 
@@ -156,8 +179,8 @@ def main():
         warnings.append("TELEGRAM_BOT_TOKEN 미설정 (미리보기 모드로 동작)")
     if not config.TELEGRAM_CHANNEL_ID:
         warnings.append("TELEGRAM_CHANNEL_ID 미설정")
-    if not config.TWITTER_USERNAME:
-        warnings.append("Twitter 인증 정보 미설정 (트윗 수집 불가)")
+    if not config.RAPIDAPI_KEY:
+        warnings.append("RAPIDAPI_KEY 미설정 (트윗 수집 불가)")
 
     for w in warnings:
         logger.warning(f"[설정] {w}")

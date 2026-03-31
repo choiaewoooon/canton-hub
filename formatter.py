@@ -10,7 +10,6 @@ import config
 
 
 def _fmt_cc(n: float | None) -> str:
-    """CC 수량 축약 (M 단위)"""
     if n is None:
         return "N/A"
     if abs(n) >= 1_000_000_000:
@@ -23,7 +22,6 @@ def _fmt_cc(n: float | None) -> str:
 
 
 def _fmt_usd(n: float | None) -> str:
-    """USD 금액 포맷"""
     if n is None:
         return "N/A"
     if n >= 1:
@@ -32,7 +30,6 @@ def _fmt_usd(n: float | None) -> str:
 
 
 def _fmt_large_usd(n: float | None) -> str:
-    """큰 USD 축약"""
     if n is None:
         return "N/A"
     if n >= 1_000_000_000:
@@ -48,6 +45,7 @@ def build_daily_report(
     tweets: dict[str, list[TweetData]],
     scan_data: CantonScanData,
     price_data: PriceData,
+    tweet_summary: str = "",
 ) -> str:
     """일일 리포트 텔레그램 메시지 생성 (HTML 파싱 모드)"""
 
@@ -88,20 +86,17 @@ def build_daily_report(
 
     # ── 네트워크 지표 ──
     if scan_data.fetched:
-        # B/M Ratio 강조
         if scan_data.burn_mint_ratio is not None:
             ratio = scan_data.burn_mint_ratio
             status = "디플레이션" if ratio >= 1 else "인플레이션"
             lines.append(f"<b>B/M Ratio: {ratio:.4f}x</b> ({status})")
 
-        # Mint / Burn 한 줄
         if scan_data.daily_mint is not None and scan_data.daily_burn is not None:
             lines.append(
                 f"Mint {_fmt_cc(scan_data.daily_mint)} CC"
                 f" → Burn {_fmt_cc(scan_data.daily_burn)} CC"
             )
 
-        # 리워드 분배
         reward_parts = []
         if scan_data.app_rewards is not None:
             reward_parts.append(f"App {_fmt_cc(scan_data.app_rewards)}")
@@ -112,22 +107,28 @@ def build_daily_report(
         if reward_parts:
             lines.append("Rewards: " + " | ".join(reward_parts))
 
-        # 누적 지표
         cum_parts = []
+        if scan_data.cumulative_mint is not None:
+            cum_parts.append(f"총 발행 {_fmt_cc(scan_data.cumulative_mint)}")
         if scan_data.cumulative_burn is not None:
             cum_parts.append(f"총 소각 {_fmt_cc(scan_data.cumulative_burn)}")
-        if scan_data.total_supply is not None:
-            cum_parts.append(f"총 공급 {_fmt_cc(scan_data.total_supply)}")
         if cum_parts:
             lines.append(" | ".join(cum_parts))
+        if scan_data.cumulative_mint and scan_data.cumulative_burn:
+            ratio = scan_data.cumulative_burn / scan_data.cumulative_mint * 100
+            lines.append(f"누적 소각률 {ratio:.2f}%")
     else:
         lines.append("네트워크 데이터 수집 실패")
     lines.append("")
 
-    # ── 트위터 ──
+    # ── 트위터 소식 (AI 요약) ──
     total_tweets = sum(len(tw_list) for tw_list in tweets.values())
-    if total_tweets > 0:
-        lines.append("<b>Twitter</b>")
+    if total_tweets > 0 and tweet_summary:
+        lines.append(f"<b>\U0001f5de\ufe0f 트위터 소식 정리</b>")
+        lines.append(tweet_summary)
+        lines.append("")
+    elif total_tweets > 0:
+        lines.append(f"<b>\U0001f5de\ufe0f 트위터 소식 정리</b>")
         for account, tw_list in tweets.items():
             if not tw_list:
                 continue
@@ -135,9 +136,8 @@ def build_daily_report(
                 text = tw.text.replace("<", "&lt;").replace(">", "&gt;")
                 if len(text) > 150:
                     text = text[:147] + "..."
-                lines.append(f"@{account}: {text}")
-                lines.append(f'<a href="{tw.url}">원문</a>')
-                lines.append("")
+                lines.append(f"· {text}")
+        lines.append("")
 
     # ── 푸터 ──
     lines.append(

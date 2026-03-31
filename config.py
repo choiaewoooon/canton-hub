@@ -14,15 +14,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "")  # 예: "@my_canton_channel" 또는 "-100xxxx"
 
 # ============================================================
-# Twitter/X 설정 (twscrape용)
+# Twitter/X 설정 (RapidAPI - Twitter API45)
 # ============================================================
-# 트위터 계정 정보 (twscrape 인증용)
-TWITTER_USERNAME = os.getenv("TWITTER_USERNAME", "")
-TWITTER_PASSWORD = os.getenv("TWITTER_PASSWORD", "")
-TWITTER_EMAIL = os.getenv("TWITTER_EMAIL", "")
-TWITTER_EMAIL_PASSWORD = os.getenv("TWITTER_EMAIL_PASSWORD", "")  # IMAP 인증용
-# 쿠키 기반 인증 (더 안정적, 선택사항)
-TWITTER_COOKIES = os.getenv("TWITTER_COOKIES", "")
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
 
 # 모니터링 대상 트위터 계정
 TWITTER_ACCOUNTS = ["CantonNetwork", "CantonFdn"]
