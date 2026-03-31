@@ -5,3 +5,5 @@ bot.log
 test_card.png
 *.db
 .DS_Store
+.claude/
+test_card_up.png
