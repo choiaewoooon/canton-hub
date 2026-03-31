@@ -24,7 +24,9 @@ def _load_image_b64(filename: str) -> str:
         return ""
     data = path.read_bytes()
     b64 = base64.b64encode(data).decode("utf-8")
-    return f"data:image/jpeg;base64,{b64}"
+    ext = path.suffix.lstrip(".")
+    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
+    return f"data:{mime};base64,{b64}"
 
 
 def _fmt_cc(n: float | None) -> str:
@@ -71,10 +73,17 @@ async def generate_daily_card(
     profile_b64 = _load_image_b64("profile.jpg")
     logo_b64 = _load_image_b64("canton_logo.jpg")
 
+    # 가격 등락에 따른 스티커
+    pct = price_data.price_change_percentage_24h or 0
+    sticker_b64 = _load_image_b64("gm.webp") if pct >= 0 else _load_image_b64("rekt.webp")
+    sticker_text = "GM" if pct >= 0 else "개물림"
+
     html = template.render(
         date_str=date_str,
         profile_b64=profile_b64,
         logo_b64=logo_b64,
+        sticker_b64=sticker_b64,
+        sticker_text=sticker_text,
         price=price_data,
         price_usd=_fmt_usd(price_data.current_price_usd),
         price_change_pct=price_data.price_change_percentage_24h or 0,
@@ -109,19 +118,22 @@ async def generate_daily_card(
             await page.set_content(html, wait_until="networkidle")
             await page.wait_for_timeout(500)
 
-            # body 콘텐츠 높이에 정확히 맞춰 clip
-            body_box = await page.evaluate("""
+            # wrapper div 높이 + body padding 포함
+            card_height = await page.evaluate("""
                 () => {
+                    const wrapper = document.getElementById('card-wrapper');
                     const body = document.body;
-                    const rect = body.getBoundingClientRect();
-                    const height = Math.max(body.scrollHeight, body.offsetHeight, rect.height);
-                    return { width: 800, height: Math.ceil(height) };
+                    const bodyStyle = getComputedStyle(body);
+                    const padTop = parseFloat(bodyStyle.paddingTop);
+                    const padBot = parseFloat(bodyStyle.paddingBottom);
+                    return wrapper.getBoundingClientRect().height + padTop + padBot;
                 }
             """)
-            await page.set_viewport_size(body_box)
+            card_height = int(card_height) + 2
+            await page.set_viewport_size({"width": 800, "height": card_height})
             image_bytes = await page.screenshot(
                 type="png",
-                clip={"x": 0, "y": 0, "width": 800, "height": body_box["height"]},
+                clip={"x": 0, "y": 0, "width": 800, "height": card_height},
             )
             await browser.close()
 

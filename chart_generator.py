@@ -19,12 +19,12 @@ import config
 logger = logging.getLogger(__name__)
 
 # 다크 테마 색상 (이미지 카드와 통일)
-BG_COLOR = "#0f0f23"
-GRID_COLOR = "#1a1a3e"
-TEXT_COLOR = "#888888"
-UP_COLOR = "#00d68f"
+BG_COLOR = "#0a0a0a"
+GRID_COLOR = "#1a1a1a"
+TEXT_COLOR = "#777777"
+UP_COLOR = "#c8e64a"
 DOWN_COLOR = "#ff5a5a"
-LINE_COLOR = "#6366f1"
+LINE_COLOR = "#c8e64a"
 
 
 async def fetch_ohlc_data() -> list[dict]:

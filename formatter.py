@@ -89,7 +89,7 @@ def build_daily_report(
         if scan_data.burn_mint_ratio is not None:
             ratio = scan_data.burn_mint_ratio
             status = "디플레이션" if ratio >= 1 else "인플레이션"
-            lines.append(f"<b>B/M Ratio: {ratio:.4f}x</b> ({status})")
+            lines.append(f"\U0001f525 <b>B/M Ratio: {ratio:.4f}x</b> ({status})")
 
         if scan_data.daily_mint is not None and scan_data.daily_burn is not None:
             lines.append(
@@ -125,10 +125,11 @@ def build_daily_report(
     total_tweets = sum(len(tw_list) for tw_list in tweets.values())
     if total_tweets > 0 and tweet_summary:
         lines.append(f"<b>\U0001f5de\ufe0f 트위터 소식 정리</b>")
-        lines.append(tweet_summary)
+        lines.append(f"<blockquote>{tweet_summary}</blockquote>")
         lines.append("")
     elif total_tweets > 0:
         lines.append(f"<b>\U0001f5de\ufe0f 트위터 소식 정리</b>")
+        fallback_lines = []
         for account, tw_list in tweets.items():
             if not tw_list:
                 continue
@@ -136,7 +137,8 @@ def build_daily_report(
                 text = tw.text.replace("<", "&lt;").replace(">", "&gt;")
                 if len(text) > 150:
                     text = text[:147] + "..."
-                lines.append(f"· {text}")
+                fallback_lines.append(f"· {text}")
+        lines.append(f"<blockquote>{chr(10).join(fallback_lines)}</blockquote>")
         lines.append("")
 
     # ── 푸터 ──
