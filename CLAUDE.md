@@ -13,7 +13,7 @@
 
 ```
 bot.py (스케줄러 + 오케스트레이터)
-  ├── collectors/twitter_collector.py    # twscrape로 트위터 수집
+  ├── collectors/twitter_collector.py    # RapidAPI Twitter API45로 트윗 수집
   ├── collectors/cantonscan_collector.py # CantonScan 네트워크 지표 수집
   ├── collectors/price_collector.py      # CoinGecko $CC 가격 수집
   ├── formatter.py                       # 수집 데이터 → HTML 텔레그램 메시지
@@ -31,8 +31,7 @@ bot.py (스케줄러 + 오케스트레이터)
 | 패키지 | 용도 |
 |--------|------|
 | python-telegram-bot | 텔레그램 메시지 전송 |
-| twscrape | Twitter/X 트윗 수집 |
-| httpx | HTTP 클라이언트 (CoinGecko, CantonScan) |
+| httpx | HTTP 클라이언트 (RapidAPI, CoinGecko, CantonScan) |
 | beautifulsoup4 | HTML 파싱 (CantonScan) |
 | playwright | 동적 페이지 스크래핑 (CantonScan 폴백) |
 | APScheduler | cron 스케줄링 |
@@ -43,8 +42,7 @@ bot.py (스케줄러 + 오케스트레이터)
 `.env` 파일 필수. `.env.example` 참조.
 
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHANNEL_ID`: 텔레그램 봇 인증
-- `TWITTER_USERNAME` / `TWITTER_PASSWORD` / `TWITTER_EMAIL`: twscrape 인증
-- `TWITTER_COOKIES`: 쿠키 기반 인증 (더 안정적, 선택)
+- `RAPIDAPI_KEY`: RapidAPI Twitter API45 인증
 - `COINGECKO_API_KEY`: 레이트 리밋 완화용 (선택)
 
 ## 코딩 컨벤션

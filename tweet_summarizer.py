@@ -42,12 +42,17 @@ async def summarize_tweets(tweets: dict[str, list[TweetData]]) -> str:
 
 텔레그램 채널 공지에 들어갈 트위터 요약을 작성해라.
 
-규칙:
-- 한국어, 간결한 뉴스 톤 (~발표, ~진행 중, ~합류 등)
+톤앤매너 (코블린 @cobling 채널 스타일):
+- 반말 + "~됨/~함/~인 듯/~하는 중" 체의 간결한 구어체
+- 팩트 나열 위주, 과장이나 실러 톤 없이 건조하게
+- 감상은 짧게 1문장 이내, 자조적 유머 OK ("제발ㅋㅋ", "ㅇㄱㅈ" 등)
+- 이모지 최소한. 거의 안 씀
+
+포맷 규칙:
 - 텔레그램 HTML 태그만 사용 (<b>, <a href="URL">텍스트</a> 만 가능. 마크다운 금지)
 - 핵심 3-5개 항목만. 비슷한 내용은 하나로 합쳐라
 - 각 항목 앞에 · 사용
-- 각 항목 문장 끝에 해당 트윗 원문 링크를 마침표 대신 넣어라. 형식: <a href="트윗URL">.</a>
+- 각 항목 문장 끝에 해당 트윗 원문 링크를 넣어라. 형식: <a href="트윗URL">원문</a>
 - 반응(likes/views) 높은 트윗에 가중치
 - 전체 5줄 이내로 압축
 - 앞뒤에 빈 줄이나 제목 붙이지 마라. 요약 본문만 출력해라
@@ -60,7 +65,7 @@ URL 참조:
 
     try:
         process = await asyncio.create_subprocess_exec(
-            "claude", "-p", prompt,
+            "/opt/homebrew/bin/claude", "-p", prompt,
             "--output-format", "text",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

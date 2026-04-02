@@ -17,7 +17,7 @@
 - **Python 3.11+** 필요
 - **텔레그램 봇 토큰**: [@BotFather](https://t.me/BotFather)에서 봇 생성 후 토큰 발급
 - **텔레그램 채널**: 봇을 채널 관리자로 추가 (메시지 발송 권한 필요)
-- **Twitter/X 계정**: twscrape 인증용 (트윗 수집에 필요)
+- **RapidAPI 키**: [Twitter API45](https://rapidapi.com/DataFanatic/api/twitter-api45)에서 발급 (트윗 수집에 필요)
 
 ### 2. 설치
 
@@ -47,12 +47,10 @@ cp .env.example .env
 # 필수
 TELEGRAM_BOT_TOKEN=7123456789:AAH...     # BotFather에서 발급
 TELEGRAM_CHANNEL_ID=@my_canton_channel    # 채널 username 또는 chat_id
+RAPIDAPI_KEY=your_rapidapi_key            # RapidAPI Twitter API45 키
 
-# Twitter (트윗 수집에 필요)
-TWITTER_USERNAME=your_username
-TWITTER_PASSWORD=your_password
-TWITTER_EMAIL=your@email.com
-TWITTER_EMAIL_PASSWORD=email_password
+# 선택
+COINGECKO_API_KEY=                        # 레이트 리밋 완화용
 ```
 
 ### 4. 텔레그램 봇 설정
@@ -63,16 +61,7 @@ TWITTER_EMAIL_PASSWORD=email_password
 4. 공지 채널에서 봇을 **관리자**로 추가 (메시지 발송 권한)
 5. 채널 ID: `@채널username` 또는 비공개 채널은 `-100` + 숫자 ID
 
-### 5. Twitter 쿠키 설정 (선택, 더 안정적)
-
-계정/패스워드 대신 쿠키로 인증하면 더 안정적입니다:
-
-1. 브라우저에서 twitter.com 로그인
-2. 개발자 도구(F12) > Application > Cookies
-3. `auth_token`, `ct0` 값을 복사
-4. `.env`에 `TWITTER_COOKIES='auth_token=xxx; ct0=yyy'` 형태로 입력
-
-### 6. 실행
+### 5. 실행
 
 ```bash
 # 테스트 (즉시 1회 실행)
@@ -91,7 +80,7 @@ canton-telegram-bot/
 ├── formatter.py                    # 텔레그램 메시지 포매터
 ├── collectors/
 │   ├── __init__.py
-│   ├── twitter_collector.py        # Twitter/X 데이터 수집 (twscrape)
+│   ├── twitter_collector.py        # Twitter/X 데이터 수집 (RapidAPI)
 │   ├── cantonscan_collector.py     # CantonScan 네트워크 지표 수집
 │   └── price_collector.py          # CoinGecko $CC 가격 수집
 ├── requirements.txt
@@ -99,95 +88,70 @@ canton-telegram-bot/
 └── README.md
 ```
 
-## 서비스로 등록 (백그라운드 실행)
+## 백그라운드 실행 (macOS launchd)
 
-### systemd (Linux)
+현재 `~/Library/LaunchAgents/com.cobling.canton-bot.plist`로 등록되어 있음.
 
-```bash
-sudo tee /etc/systemd/system/canton-bot.service << 'EOF'
-[Unit]
-Description=Canton Telegram Bot
-After=network.target
-
-[Service]
-Type=simple
-User=your_username
-WorkingDirectory=/path/to/canton-telegram-bot
-ExecStart=/path/to/canton-telegram-bot/venv/bin/python bot.py
-Restart=always
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable canton-bot
-sudo systemctl start canton-bot
-```
-
-### macOS (launchd)
+### 상태 확인
 
 ```bash
-cat > ~/Library/LaunchAgents/com.canton.bot.plist << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.canton.bot</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/path/to/canton-telegram-bot/venv/bin/python</string>
-        <string>/path/to/canton-telegram-bot/bot.py</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>WorkingDirectory</key>
-    <string>/path/to/canton-telegram-bot</string>
-</dict>
-</plist>
-EOF
-
-launchctl load ~/Library/LaunchAgents/com.canton.bot.plist
+launchctl list | grep cobling
 ```
+
+- `PID 숫자 0 com.cobling.canton-bot` → 정상 실행 중
+- `- 1 com.cobling.canton-bot` → 꺼진 상태 (에러)
+
+### 시작
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.cobling.canton-bot.plist
+```
+
+### 중지
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.cobling.canton-bot.plist
+```
+
+### 재시작
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.cobling.canton-bot.plist
+launchctl load ~/Library/LaunchAgents/com.cobling.canton-bot.plist
+```
+
+### 로그 확인
+
+```bash
+# 실시간 로그
+tail -f "/Users/choejaewon/project/Canton telebot(coblin)/launchd_stdout.log"
+
+# 에러 로그
+tail -f "/Users/choejaewon/project/Canton telebot(coblin)/launchd_stderr.log"
+
+# bot.py 자체 로그
+tail -f "/Users/choejaewon/project/Canton telebot(coblin)/bot.log"
+```
+
+### 완전 삭제
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.cobling.canton-bot.plist
+rm ~/Library/LaunchAgents/com.cobling.canton-bot.plist
+```
+
+### 참고
+
+- 맥 재부팅해도 자동 시작됨 (`RunAtLoad` + `KeepAlive`)
+- 크래시 시 자동 재시작됨
+- 스케줄 변경은 `.env`의 `SCHEDULE_HOUR` / `SCHEDULE_MINUTE` 수정 후 재시작
 
 ## 트러블슈팅
 
 | 문제 | 해결 방법 |
 |------|-----------|
-| twscrape 인증 실패 | 쿠키 기반 인증으로 전환. Twitter 계정이 잠겨있지 않은지 확인 |
+| RapidAPI 인증 실패 | RAPIDAPI_KEY가 올바른지, Twitter API45 구독이 활성화되어 있는지 확인 |
 | CantonScan 데이터 없음 | 사이트 구조가 변경되었을 수 있음. `cantonscan_collector.py`의 파싱 로직 업데이트 필요 |
 | CoinGecko 429 에러 | Rate limit 초과. 무료 Demo API Key 등록 권장 |
 | 텔레그램 전송 실패 | 봇이 채널 관리자인지, 메시지 발송 권한이 있는지 확인 |
-
-## 메시지 예시
-
-```
-📢 Canton Daily Update
-2026-03-31 (Mon)
-
-💰 $CC Price
-  Price: $0.4523
-  24h Change: 🟢 +3.45%
-  24h Range: $0.4312 ~ $0.4601
-  24h Volume: $12.5M
-  Market Cap: $6.02B
-
-📊 Network Stats (CantonScan)
-  Daily Burn: 1,234,567 CC
-  Daily Mint: 987,654 CC
-  Burn/Mint Ratio: 1.25x
-
-🐦 Twitter Updates
-
-  @CantonNetwork (2 tweets)
-  [09:15] New partnership announcement with...
-  💬 12 | 🔄 45 | ❤️ 189
-  View Tweet
-
-────────────────────────────
-CantonScan | CoinGecko | Twitter
-```
+| launchd 시작 안됨 | `launchd_stderr.log` 확인. venv 경로나 Python 버전 문제일 수 있음 |

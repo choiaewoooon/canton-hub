@@ -59,7 +59,7 @@ def build_daily_report(
     lines.append(f"<b>Canton Daily | {date_str}</b>")
     lines.append("")
 
-    # ── $CC 가격 ──
+    # ── $CC 가격 (한 줄) ──
     if price_data.fetched:
         pct = price_data.price_change_percentage_24h
         if pct is not None:
@@ -70,53 +70,20 @@ def build_daily_report(
             )
         else:
             lines.append(f"<b>$CC {_fmt_usd(price_data.current_price_usd)}</b>")
-
-        parts = []
-        if price_data.low_24h and price_data.high_24h:
-            parts.append(f"24h {_fmt_usd(price_data.low_24h)} ~ {_fmt_usd(price_data.high_24h)}")
-        if price_data.total_volume_24h:
-            parts.append(f"Vol {_fmt_large_usd(price_data.total_volume_24h)}")
-        if price_data.market_cap:
-            parts.append(f"MCap {_fmt_large_usd(price_data.market_cap)}")
-        if parts:
-            lines.append(" | ".join(parts))
     else:
         lines.append("$CC 가격 데이터 수집 실패")
-    lines.append("")
 
-    # ── 네트워크 지표 ──
+    # ── B/M Ratio + Mint/Burn ──
     if scan_data.fetched:
         if scan_data.burn_mint_ratio is not None:
             ratio = scan_data.burn_mint_ratio
             status = "디플레이션" if ratio >= 1 else "인플레이션"
             lines.append(f"\U0001f525 <b>B/M Ratio: {ratio:.4f}x</b> ({status})")
-
-        if scan_data.daily_mint is not None and scan_data.daily_burn is not None:
-            lines.append(
-                f"Mint {_fmt_cc(scan_data.daily_mint)} CC"
-                f" → Burn {_fmt_cc(scan_data.daily_burn)} CC"
-            )
-
-        reward_parts = []
-        if scan_data.app_rewards is not None:
-            reward_parts.append(f"App {_fmt_cc(scan_data.app_rewards)}")
-        if scan_data.validator_rewards is not None:
-            reward_parts.append(f"Val {_fmt_cc(scan_data.validator_rewards)}")
-        if scan_data.sv_rewards is not None:
-            reward_parts.append(f"SV {_fmt_cc(scan_data.sv_rewards)}")
-        if reward_parts:
-            lines.append("Rewards: " + " | ".join(reward_parts))
-
-        cum_parts = []
-        if scan_data.cumulative_mint is not None:
-            cum_parts.append(f"총 발행 {_fmt_cc(scan_data.cumulative_mint)}")
-        if scan_data.cumulative_burn is not None:
-            cum_parts.append(f"총 소각 {_fmt_cc(scan_data.cumulative_burn)}")
-        if cum_parts:
-            lines.append(" | ".join(cum_parts))
-        if scan_data.cumulative_mint and scan_data.cumulative_burn:
-            ratio = scan_data.cumulative_burn / scan_data.cumulative_mint * 100
-            lines.append(f"누적 소각률 {ratio:.2f}%")
+            if scan_data.daily_mint is not None and scan_data.daily_burn is not None:
+                lines.append(
+                    f"Mint {_fmt_cc(scan_data.daily_mint)} CC"
+                    f" → Burn {_fmt_cc(scan_data.daily_burn)} CC"
+                )
     else:
         lines.append("네트워크 데이터 수집 실패")
     lines.append("")
@@ -141,11 +108,5 @@ def build_daily_report(
         lines.append(f"<blockquote>{chr(10).join(fallback_lines)}</blockquote>")
         lines.append("")
 
-    # ── 푸터 ──
-    lines.append(
-        f'<a href="https://www.cantonscan.com/stats">CantonScan</a>'
-        f' · <a href="https://www.coingecko.com/en/coins/canton-network">CoinGecko</a>'
-        f' · <a href="https://x.com/CantonNetwork">@CantonNetwork</a>'
-    )
 
     return "\n".join(lines)

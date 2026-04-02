@@ -142,7 +142,10 @@ def run_scheduler():
     """APScheduler로 매일 지정 시간에 실행"""
     kst = ZoneInfo(config.TIMEZONE)
 
-    scheduler = AsyncIOScheduler(timezone=kst)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    scheduler = AsyncIOScheduler(timezone=kst, event_loop=loop)
     scheduler.add_job(
         collect_and_post,
         trigger="cron",
@@ -158,9 +161,6 @@ def run_scheduler():
         f"스케줄러 시작: 매일 {config.SCHEDULE_HOUR:02d}:{config.SCHEDULE_MINUTE:02d} KST 실행"
     )
 
-    # 이벤트 루프 유지
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
         loop.run_forever()
     except (KeyboardInterrupt, SystemExit):
