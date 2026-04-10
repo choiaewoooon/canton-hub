@@ -4,6 +4,8 @@ import { useState } from "react";
 import Navbar from "@/components/nav/navbar";
 import HeroPrice from "@/components/hero/hero-price";
 import KpiGrid from "@/components/kpi/kpi-grid";
+import ChartArea from "@/components/charts/chart-area";
+import BmSection from "@/components/charts/bm-section";
 import { usePrice, useNetwork } from "@/lib/api";
 import { useRealtimePrice } from "@/lib/sse";
 
@@ -19,7 +21,8 @@ export default function Dashboard() {
       <main className="max-w-[1200px] mx-auto px-6 py-5">
         <HeroPrice data={realtimePrice} />
         <KpiGrid data={networkData} />
-        <p className="text-zinc-500">More components coming soon...</p>
+        <ChartArea />
+        <BmSection network={networkData} />
       </main>
     </div>
   );
