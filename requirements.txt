@@ -7,3 +7,6 @@ APScheduler>=3.10
 playwright>=1.40
 Jinja2>=3.1
 matplotlib>=3.8
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sse-starlette>=2.0
