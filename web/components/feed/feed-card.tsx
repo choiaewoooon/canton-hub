@@ -36,10 +36,18 @@ export default function FeedCard({ lang }: FeedCardProps) {
 
       {data?.ai_summary && (
         <div className="mt-3 pt-3 border-t border-canton-border">
-          <div className="flex items-center gap-1.5 text-[10px] mb-1" style={{ color: "#c8e64a80" }}>
+          <div className="flex items-center gap-1.5 text-[10px] mb-2" style={{ color: "#c8e64a80" }}>
+            <span className="inline-block w-1 h-1 rounded-full" style={{ backgroundColor: "#c8e64a" }} />
             AI 요약
           </div>
-          <p className="text-[13px] text-zinc-400 leading-relaxed">{data.ai_summary}</p>
+          <ul className="space-y-1.5">
+            {data.ai_summary.split("·").filter(Boolean).map((line, i) => (
+              <li key={i} className="text-[12px] text-zinc-400 leading-relaxed flex gap-2">
+                <span className="text-zinc-600 mt-0.5 shrink-0">•</span>
+                <span>{line.trim()}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

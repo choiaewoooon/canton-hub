@@ -44,15 +44,19 @@ async def collect_network(cache: TTLCache):
             bm = data.burn_mint_ratio or 0
             price_data = cache.get("price") or {}
             daily_burn_usd = (data.daily_burn or 0) * price_data.get("current_price_usd", 0)
+            # cantonscan 홈페이지에서 스크래핑한 데이터 (하루 1회)
+            from collectors.cantonscan_scraper import load_cached_homepage_data
+            homepage = load_cached_homepage_data()
+
             cache.set("network", {
                 "bm_ratio": round(bm, 4),
                 "bm_status": "deflationary" if bm >= 1 else "inflationary",
-                "active_addresses_24h": data.daily_active_addresses,
-                "active_addresses_change": None,
+                "active_addresses_24h": homepage.get("active_addresses_24h", data.daily_active_addresses),
+                "active_addresses_change": homepage.get("active_addresses_change"),
                 "daily_burn_usd": round(daily_burn_usd, 2),
                 "daily_burn_change": None,
-                "private_tx_ratio": None,
-                "private_tx_count": None,
+                "private_tx_ratio": homepage.get("private_tx_ratio"),
+                "private_tx_count": homepage.get("private_tx_count"),
                 "daily_mint": data.daily_mint,
                 "daily_burn": data.daily_burn,
                 "net_supply_change": (data.daily_mint or 0) - (data.daily_burn or 0),
@@ -61,7 +65,7 @@ async def collect_network(cache: TTLCache):
                 "total_supply": data.total_supply or data.cumulative_mint,
                 "super_validators": 45,
                 "validator_nodes": 866,
-                "total_transfers_24h": data.daily_transactions,
+                "total_transfers_24h": homepage.get("total_transfers_24h", data.daily_transactions),
                 "cumulative_burned": data.cumulative_burn,
                 "cumulative_burn_rate": round(
                     (data.cumulative_burn / data.cumulative_mint * 100) if data.cumulative_mint and data.cumulative_burn else 0, 2
@@ -193,10 +197,21 @@ async def start_scheduler(cache: TTLCache):
             except Exception as e:
                 logger.error(f"Scheduled {name} failed: {e}")
 
+async def collect_homepage(cache: TTLCache):
+    """CantonScan 홈페이지 스크래핑 (하루 1회). 완료 후 network 데이터 갱신."""
+    try:
+        from collectors.cantonscan_scraper import scrape_cantonscan_homepage
+        await scrape_cantonscan_homepage()
+        logger.info("Homepage scrape complete, refreshing network data...")
+        await collect_network(cache)
+    except Exception as e:
+        logger.error(f"Homepage scrape failed: {e}")
+
+
 async def _deferred_initial(cache: TTLCache):
     """느린 collector들을 백그라운드에서 수집."""
-    logger.info("Running deferred collection (charts, feed, governance)...")
-    await asyncio.gather(collect_charts(cache), collect_feed(cache), collect_governance(cache), return_exceptions=True)
+    logger.info("Running deferred collection (charts, feed, governance, homepage)...")
+    await asyncio.gather(collect_charts(cache), collect_feed(cache), collect_governance(cache), collect_homepage(cache), return_exceptions=True)
     logger.info("Deferred collection complete")
 
     asyncio.create_task(_loop(collect_price, 30, "price"))
@@ -204,3 +219,4 @@ async def _deferred_initial(cache: TTLCache):
     asyncio.create_task(_loop(collect_charts, 900, "charts"))
     asyncio.create_task(_loop(collect_feed, 900, "feed"))
     asyncio.create_task(_loop(collect_governance, 3600, "governance"))
+    asyncio.create_task(_loop(collect_homepage, 86400, "homepage"))  # 하루 1회
