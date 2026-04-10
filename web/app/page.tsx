@@ -2,15 +2,24 @@
 
 import { useState } from "react";
 import Navbar from "@/components/nav/navbar";
+import HeroPrice from "@/components/hero/hero-price";
+import KpiGrid from "@/components/kpi/kpi-grid";
+import { usePrice, useNetwork } from "@/lib/api";
+import { useRealtimePrice } from "@/lib/sse";
 
 export default function Dashboard() {
   const [lang, setLang] = useState("ko");
+  const { data: swrPrice } = usePrice();
+  const { data: realtimePrice, connected } = useRealtimePrice(swrPrice);
+  const { data: networkData } = useNetwork();
 
   return (
     <div className="min-h-screen bg-canton-bg">
-      <Navbar lang={lang} onLangChange={setLang} connected={false} />
+      <Navbar lang={lang} onLangChange={setLang} connected={connected} />
       <main className="max-w-[1200px] mx-auto px-6 py-5">
-        <p className="text-zinc-500">Dashboard components coming soon...</p>
+        <HeroPrice data={realtimePrice} />
+        <KpiGrid data={networkData} />
+        <p className="text-zinc-500">More components coming soon...</p>
       </main>
     </div>
   );
