@@ -8,9 +8,9 @@ import {
 import { useChart } from "@/lib/api";
 
 const TABS = [
-  { key: "price", label: "CC Price", color: "#c8e64a", dataKey: "close", xKey: "time" },
-  { key: "burn", label: "Burn Activity", color: "#fb923c", dataKey: "burn", xKey: "date" },
-  { key: "private-tx", label: "Private TX (Institutional)", color: "#a78bfa", dataKey: "ratio", xKey: "date" },
+  { key: "price", label: "CC Price", color: "#c8e64a", dataKey: "close", xKey: "time", chartType: "area" as const },
+  { key: "burn", label: "Burn Activity", color: "#fb923c", dataKey: "burn", xKey: "date", chartType: "bar" as const },
+  { key: "bm-ratio", label: "B/M Ratio", color: "#a78bfa", dataKey: "ratio", xKey: "date", chartType: "area" as const },
 ] as const;
 
 const PERIODS = ["24h", "7d", "1m", "3m"] as const;
@@ -22,12 +22,12 @@ export default function ChartArea() {
   // 3개 차트 데이터 모두 fetch
   const { data: priceData } = useChart("price", period);
   const { data: burnData } = useChart("burn", period);
-  const { data: privateTxData } = useChart("private-tx", period);
+  const { data: bmRatioData } = useChart("bm-ratio", period);
 
   const dataMap: Record<string, unknown[]> = {
     price: priceData || [],
     burn: burnData || [],
-    "private-tx": privateTxData || [],
+    "bm-ratio": bmRatioData || [],
   };
 
   const activeConfig = TABS.find((t) => t.key === activeTab)!;
@@ -75,7 +75,7 @@ export default function ChartArea() {
       {/* Main chart */}
       <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
-          {activeTab === "burn" ? (
+          {activeConfig.chartType === "bar" ? (
             <BarChart data={dataMap[activeTab] as Record<string, unknown>[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1c1c1f" />
               <XAxis dataKey="date" tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} />
@@ -115,7 +115,7 @@ export default function ChartArea() {
             </div>
             <div className="h-[60px]">
               <ResponsiveContainer width="100%" height="100%">
-                {tab.key === "burn" ? (
+                {tab.chartType === "bar" ? (
                   <BarChart data={(dataMap[tab.key] as Record<string, unknown>[]).slice(-7)}>
                     <Bar dataKey="burn" fill={tab.color} fillOpacity={0.5} radius={[2, 2, 0, 0]} />
                   </BarChart>

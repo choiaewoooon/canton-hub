@@ -27,7 +27,7 @@ async def collect_price(cache: TTLCache):
                 "market_cap": data.market_cap,
                 "total_volume_24h": data.total_volume_24h,
                 "circulating_supply": data.circulating_supply,
-            }, ttl=60)
+            }, ttl=120)
             logger.info(f"Price cached: ${data.current_price_usd}")
     except Exception as e:
         logger.error(f"Price collection failed: {e}")
@@ -78,16 +78,38 @@ async def collect_network(cache: TTLCache):
         await collector.close()
 
 
+async def _fetch_ohlc(days: str) -> list[dict]:
+    """CoinGecko OHLC 데이터 가져오기."""
+    import httpx
+    import config
+    url = f"{config.COINGECKO_API_URL}/coins/{config.COINGECKO_COIN_ID}/ohlc"
+    params = {"vs_currency": "usd", "days": days}
+    headers = {"Accept": "application/json"}
+    if config.COINGECKO_API_KEY:
+        headers["x-cg-demo-api-key"] = config.COINGECKO_API_KEY
+    async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        raw = resp.json()
+    from datetime import datetime, timezone
+    return [
+        {"time": datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime("%m/%d %H:%M"),
+         "open": o, "high": h, "low": l, "close": c}
+        for ts, o, h, l, c in raw
+    ]
+
+
 async def collect_charts(cache: TTLCache):
     import httpx
-    # Price chart
+    # Price chart — 기간별 CoinGecko OHLC
     try:
-        from chart_generator import fetch_ohlc_data
-        candles = await fetch_ohlc_data()
-        chart_data = [{"time": c["time"].isoformat(), "open": c["open"], "high": c["high"], "low": c["low"], "close": c["close"]} for c in candles]
-        cache.set("chart:price:24h", chart_data, ttl=300)
-        cache.set("chart:price:7d", chart_data, ttl=300)
-        logger.info(f"Price chart cached: {len(chart_data)} candles")
+        for period, days in [("24h", "1"), ("7d", "7"), ("1m", "30"), ("3m", "90")]:
+            try:
+                chart_data = await _fetch_ohlc(days)
+                cache.set(f"chart:price:{period}", chart_data, ttl=300)
+                logger.info(f"Price chart {period} cached: {len(chart_data)} candles")
+            except Exception as e:
+                logger.warning(f"Price chart {period} failed: {e}")
     except Exception as e:
         logger.error(f"Price chart failed: {e}")
 
