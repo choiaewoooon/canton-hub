@@ -115,7 +115,9 @@ async def collect_feed(cache: TTLCache):
         if not tweets:
             return
         from tweet_summarizer import summarize_tweets
-        en_summary = await summarize_tweets(tweets)
+        raw_summary = await summarize_tweets(tweets)
+        # 텔레그램 HTML 태그를 웹용으로 변환
+        en_summary = _convert_telegram_html(raw_summary)
         all_tweets = []
         for account, tw_list in tweets.items():
             for tw in sorted(tw_list, key=lambda t: t.created_at, reverse=True)[:5]:
@@ -145,6 +147,21 @@ async def collect_governance(cache: TTLCache):
         await collector.close()
 
 
+def _convert_telegram_html(html: str) -> str:
+    """텔레그램 HTML 포맷을 웹용 순수 텍스트로 변환.
+
+    <a href="URL">텍스트</a> → 텍스트 (URL)
+    <b>텍스트</b> → 텍스트
+    <blockquote>텍스트</blockquote> → 텍스트
+    """
+    import re
+    # <a href="URL">텍스트</a> → 텍스트
+    text = re.sub(r'<a\s+href="[^"]*">([^<]*)</a>', r'\1', html)
+    # Remove other HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    return text.strip()
+
+
 def _relative_time(dt) -> str:
     now = datetime.now(timezone.utc)
     diff = now - dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else now - dt
@@ -160,9 +177,13 @@ async def run_all_collectors(cache: TTLCache):
 
 
 async def start_scheduler(cache: TTLCache):
-    logger.info("Running initial data collection...")
-    await run_all_collectors(cache)
-    logger.info("Initial collection complete")
+    # 빠른 데이터(가격, 네트워크)만 먼저 수집하고 서버 시작
+    logger.info("Running priority data collection (price + network)...")
+    await asyncio.gather(collect_price(cache), collect_network(cache), return_exceptions=True)
+    logger.info("Priority collection complete — server ready")
+
+    # 느린 데이터(차트, 피드, 거버넌스)는 백그라운드로
+    asyncio.create_task(_deferred_initial(cache))
 
     async def _loop(fn, interval: int, name: str):
         while True:
@@ -171,6 +192,12 @@ async def start_scheduler(cache: TTLCache):
                 await fn(cache)
             except Exception as e:
                 logger.error(f"Scheduled {name} failed: {e}")
+
+async def _deferred_initial(cache: TTLCache):
+    """느린 collector들을 백그라운드에서 수집."""
+    logger.info("Running deferred collection (charts, feed, governance)...")
+    await asyncio.gather(collect_charts(cache), collect_feed(cache), collect_governance(cache), return_exceptions=True)
+    logger.info("Deferred collection complete")
 
     asyncio.create_task(_loop(collect_price, 30, "price"))
     asyncio.create_task(_loop(collect_network, 300, "network"))
