@@ -1,7 +1,7 @@
 """Canton Hub API — FastAPI application."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes import price, network, chart, feed
+from api.routes import price, network, chart, feed, governance
 
 app = FastAPI(title="Canton Hub API")
 
@@ -16,6 +16,7 @@ app.include_router(price.router)
 app.include_router(network.router)
 app.include_router(chart.router)
 app.include_router(feed.router)
+app.include_router(governance.router)
 
 
 @app.get("/api/health")
