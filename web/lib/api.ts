@@ -10,6 +10,7 @@ import type {
   AmuletPricePoint,
   CumulativePoint,
   BurnBreakdown,
+  ExchangesData,
 } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -60,6 +61,12 @@ export function useCumulative(period: string) {
 
 export function useBurnBreakdown() {
   return useSWR<BurnBreakdown>(`${API}/api/analytics/burn-breakdown`, fetcher, {
+    refreshInterval: 900_000,
+  });
+}
+
+export function useExchanges() {
+  return useSWR<ExchangesData>(`${API}/api/analytics/exchanges`, fetcher, {
     refreshInterval: 900_000,
   });
 }

@@ -99,6 +99,45 @@ export interface CumulativePoint {
   cumulative_supply: number;
 }
 
+export interface ExchangePair {
+  pair: string;
+  volume_usd: number;
+  last_price: number;
+  trust: string;
+}
+
+export interface SpotExchange {
+  name: string;
+  identifier: string;
+  logo: string;
+  volume_usd: number;
+  pairs: ExchangePair[];
+  trust_scores: string[];
+  trade_url: string;
+  last_price: number;
+}
+
+export interface DerivativeMarket {
+  market: string;
+  symbol: string;
+  contract_type: string;
+  volume_usd: number;
+  open_interest_usd: number;
+  funding_rate: number | null;
+  last_price: number | null;
+}
+
+export interface ExchangesData {
+  spot: SpotExchange[];
+  derivatives: DerivativeMarket[];
+  total_spot_volume_usd: number;
+  total_derivatives_volume_usd: number;
+  total_open_interest_usd: number;
+  spot_exchange_count: number;
+  derivatives_count: number;
+  fetched_at: string | null;
+}
+
 export interface BurnBreakdown {
   burned_from_fees: number | null;
   burned_from_traffic: number | null;

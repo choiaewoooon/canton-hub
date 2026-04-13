@@ -12,6 +12,121 @@ CANTONSCAN_API_BASE = "https://fossil-outlook-levitate-gloomy.cantonscan.com"
 TIMESERIES_URL = f"{CANTONSCAN_API_BASE}/api/mining-rounds/timeseries?interval=day"
 
 
+async def collect_exchanges(cache: TTLCache):
+    """CoinGecko에서 CC 거래소 + 파생상품 정보 수집."""
+    import httpx
+    import config as cfg
+    from datetime import datetime, timezone
+
+    headers = {"Accept": "application/json"}
+    if cfg.COINGECKO_API_KEY:
+        headers["x-cg-demo-api-key"] = cfg.COINGECKO_API_KEY
+
+    try:
+        # 1. Spot 거래소 (CC tickers)
+        async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+            resp = await client.get(
+                f"{cfg.COINGECKO_API_URL}/coins/{cfg.COINGECKO_COIN_ID}/tickers",
+                params={"include_exchange_logo": "true"},
+            )
+            resp.raise_for_status()
+            tickers_data = resp.json()
+
+        tickers = tickers_data.get("tickers", [])
+        spot_exchanges: dict[str, dict] = {}  # 거래소별 집계
+
+        for t in tickers:
+            market = t.get("market", {})
+            name = market.get("name", "Unknown")
+            identifier = market.get("identifier", "")
+            logo = market.get("logo", "")
+            base = t.get("base", "")
+            target = t.get("target", "")
+            vol_usd = (t.get("converted_volume", {}) or {}).get("usd") or 0
+            last = (t.get("converted_last", {}) or {}).get("usd") or 0
+            trust = t.get("trust_score") or "unknown"
+            url = t.get("trade_url", "")
+            is_anomaly = t.get("is_anomaly", False)
+            is_stale = t.get("is_stale", False)
+
+            if is_anomaly or is_stale:
+                continue
+
+            # 같은 거래소의 여러 페어를 합산
+            if name not in spot_exchanges:
+                spot_exchanges[name] = {
+                    "name": name,
+                    "identifier": identifier,
+                    "logo": logo,
+                    "volume_usd": 0,
+                    "pairs": [],
+                    "trust_scores": [],
+                    "trade_url": url,
+                    "last_price": last,
+                }
+            spot_exchanges[name]["volume_usd"] += vol_usd
+            spot_exchanges[name]["pairs"].append({
+                "pair": f"{base}/{target}",
+                "volume_usd": vol_usd,
+                "last_price": last,
+                "trust": trust,
+            })
+            if trust != "unknown":
+                spot_exchanges[name]["trust_scores"].append(trust)
+
+        spot_list = sorted(spot_exchanges.values(), key=lambda x: -x["volume_usd"])
+        total_spot_vol = sum(e["volume_usd"] for e in spot_list)
+
+        # 2. Derivatives — /derivatives endpoint (Canton perp tickers)
+        derivatives = []
+        total_deriv_vol = 0
+        total_oi = 0
+        try:
+            async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+                deriv_resp = await client.get(f"{cfg.COINGECKO_API_URL}/derivatives", params={"include_tickers": "all"})
+                deriv_resp.raise_for_status()
+                all_derivs = deriv_resp.json()
+
+            # Filter Canton-related (CC, CANTON)
+            for d in all_derivs:
+                sym = (d.get("symbol") or "").upper()
+                base = (d.get("base") or "").upper()
+                if sym == "CC" or sym == "CANTONUSDT" or "CANTON" in sym or base == "CC":
+                    vol = (d.get("converted_volume", {}) or {}).get("usd") or 0
+                    oi = d.get("open_interest") or 0
+                    derivatives.append({
+                        "market": d.get("market", "Unknown"),
+                        "symbol": d.get("symbol"),
+                        "contract_type": d.get("contract_type", "perpetual"),
+                        "volume_usd": vol,
+                        "open_interest_usd": oi,
+                        "funding_rate": d.get("funding_rate"),
+                        "last_price": d.get("last"),
+                    })
+                    total_deriv_vol += vol
+                    total_oi += oi
+        except Exception as e:
+            logger.warning(f"Derivatives fetch failed: {e}")
+
+        result = {
+            "spot": spot_list[:30],
+            "derivatives": derivatives[:20],
+            "total_spot_volume_usd": total_spot_vol,
+            "total_derivatives_volume_usd": total_deriv_vol,
+            "total_open_interest_usd": total_oi,
+            "spot_exchange_count": len(spot_list),
+            "derivatives_count": len(derivatives),
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+        }
+        cache.set("analytics:exchanges", result, ttl=900)
+        logger.info(
+            f"Exchanges cached: {len(spot_list)} spot, {len(derivatives)} deriv, "
+            f"total spot vol ${total_spot_vol:,.0f}, OI ${total_oi:,.0f}"
+        )
+    except Exception as e:
+        logger.error(f"Exchanges collection failed: {e}")
+
+
 async def collect_price(cache: TTLCache):
     from collectors import PriceCollector
     collector = PriceCollector()
@@ -360,12 +475,13 @@ async def _loop(fn, cache: TTLCache, interval: int, name: str):
 
 async def _deferred_initial(cache: TTLCache):
     """느린 collector들을 백그라운드에서 수집."""
-    logger.info("Running deferred collection (charts, feed, governance, homepage)...")
+    logger.info("Running deferred collection (charts, feed, governance, homepage, exchanges)...")
     await asyncio.gather(
         collect_charts(cache),
         collect_feed(cache),
         collect_governance(cache),
         collect_homepage(cache),
+        collect_exchanges(cache),
         return_exceptions=True,
     )
     logger.info("Deferred collection complete")
@@ -387,3 +503,4 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_feed, cache, 900, "feed"))
     asyncio.create_task(_loop(collect_governance, cache, 3600, "governance"))
     asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))
+    asyncio.create_task(_loop(collect_exchanges, cache, 900, "exchanges"))  # 15분

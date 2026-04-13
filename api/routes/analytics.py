@@ -53,3 +53,16 @@ async def burn_breakdown(cache: TTLCache = Depends(get_cache)):
         "burned_from_fees": None,
         "burned_from_traffic": None,
     }
+
+
+@router.get("/exchanges")
+async def exchanges(cache: TTLCache = Depends(get_cache)):
+    """CC가 거래되는 거래소 목록 + 거래량 + 파생상품 정보."""
+    return cache.get("analytics:exchanges") or {
+        "spot": [],
+        "derivatives": [],
+        "total_spot_volume_usd": 0,
+        "total_derivatives_volume_usd": 0,
+        "total_open_interest_usd": 0,
+        "fetched_at": None,
+    }

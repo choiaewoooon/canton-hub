@@ -6,6 +6,7 @@ import RewardSplitChart from "@/components/analytics/reward-split-chart";
 import CumulativeChart from "@/components/analytics/cumulative-chart";
 import AmuletPriceChart from "@/components/analytics/amulet-price-chart";
 import BurnBreakdownCard from "@/components/analytics/burn-breakdown";
+import ExchangesSection from "@/components/analytics/exchanges-section";
 import { useLang } from "@/lib/use-lang";
 import { usePrice } from "@/lib/api";
 import { useRealtimePrice } from "@/lib/sse";
@@ -32,7 +33,12 @@ export default function AnalyticsPage() {
           </p>
         </div>
 
-        {/* Reward split — 가장 중요한 차트 */}
+        {/* Exchanges & Markets — 가장 자주 보는 정보 */}
+        <div className="mb-5">
+          <ExchangesSection lang={lang} />
+        </div>
+
+        {/* Reward split */}
         <div className="mb-5">
           <RewardSplitChart lang={lang} />
         </div>
