@@ -105,7 +105,6 @@ export default function ExchangesSection({ lang }: Props) {
   const totalSpot = data?.total_spot_volume_usd || 0;
   const totalDeriv = data?.total_derivatives_volume_usd || 0;
   const totalPerp = data?.total_perpetuals_volume_usd || 0;
-  const totalFutures = data?.total_futures_volume_usd || 0;
   const totalOI = data?.total_open_interest_usd || 0;
 
   // Spot vs Derivatives 비율
@@ -161,7 +160,7 @@ export default function ExchangesSection({ lang }: Props) {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="bg-zinc-900 rounded-md p-2.5">
             <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
               {lang === "ko" ? "현물 (24h)" : "Spot (24h)"}
@@ -178,19 +177,6 @@ export default function ExchangesSection({ lang }: Props) {
             <div className="text-[14px] font-bold text-canton-private mt-0.5">{fmtLargeUsd(totalPerp)}</div>
             <div className="text-[9px] text-zinc-700 mt-0.5">
               {data?.perpetuals_count ?? 0} {lang === "ko" ? "마켓" : "markets"}
-            </div>
-          </div>
-          <div className="bg-zinc-900 rounded-md p-2.5">
-            <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
-              {lang === "ko" ? "Futures (24h)" : "Futures (24h)"}
-            </div>
-            <div className="text-[14px] font-bold text-canton-mint mt-0.5">{fmtLargeUsd(totalFutures)}</div>
-            <div className="text-[9px] text-zinc-700 mt-0.5">
-              {(data?.futures_count ?? 0) === 0
-                ? lang === "ko"
-                  ? "현재 상장 없음"
-                  : "no listings"
-                : `${data?.futures_count} ${lang === "ko" ? "마켓" : "markets"}`}
             </div>
           </div>
         </div>
