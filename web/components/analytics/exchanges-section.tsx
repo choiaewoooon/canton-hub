@@ -161,7 +161,7 @@ export default function ExchangesSection({ lang }: Props) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div className="bg-zinc-900 rounded-md p-2.5">
             <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
               {lang === "ko" ? "현물 (24h)" : "Spot (24h)"}
@@ -173,16 +173,7 @@ export default function ExchangesSection({ lang }: Props) {
           </div>
           <div className="bg-zinc-900 rounded-md p-2.5">
             <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
-              {lang === "ko" ? "파생 전체 (24h)" : "Total Deriv (24h)"}
-            </div>
-            <div className="text-[14px] font-bold text-canton-burn mt-0.5">{fmtLargeUsd(totalDeriv)}</div>
-            <div className="text-[9px] text-zinc-700 mt-0.5">
-              {data?.derivatives_count ?? 0} {lang === "ko" ? "마켓" : "markets"}
-            </div>
-          </div>
-          <div className="bg-zinc-900 rounded-md p-2.5">
-            <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
-              {lang === "ko" ? "Perpetuals" : "Perpetuals"}
+              {lang === "ko" ? "Perpetuals (24h)" : "Perpetuals (24h)"}
             </div>
             <div className="text-[14px] font-bold text-canton-private mt-0.5">{fmtLargeUsd(totalPerp)}</div>
             <div className="text-[9px] text-zinc-700 mt-0.5">
@@ -191,11 +182,15 @@ export default function ExchangesSection({ lang }: Props) {
           </div>
           <div className="bg-zinc-900 rounded-md p-2.5">
             <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
-              {lang === "ko" ? "Futures" : "Futures"}
+              {lang === "ko" ? "Futures (24h)" : "Futures (24h)"}
             </div>
             <div className="text-[14px] font-bold text-canton-mint mt-0.5">{fmtLargeUsd(totalFutures)}</div>
             <div className="text-[9px] text-zinc-700 mt-0.5">
-              {data?.futures_count ?? 0} {lang === "ko" ? "마켓" : "markets"}
+              {(data?.futures_count ?? 0) === 0
+                ? lang === "ko"
+                  ? "현재 상장 없음"
+                  : "no listings"
+                : `${data?.futures_count} ${lang === "ko" ? "마켓" : "markets"}`}
             </div>
           </div>
         </div>
