@@ -11,6 +11,7 @@ import type {
   CumulativePoint,
   BurnBreakdown,
   ExchangesData,
+  RealtimePrices,
 } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -68,5 +69,12 @@ export function useBurnBreakdown() {
 export function useExchanges() {
   return useSWR<ExchangesData>(`${API}/api/analytics/exchanges`, fetcher, {
     refreshInterval: 900_000,
+  });
+}
+
+export function useRealtimePrices() {
+  return useSWR<RealtimePrices>(`${API}/api/analytics/realtime-prices`, fetcher, {
+    refreshInterval: 5_000,
+    revalidateOnFocus: false,
   });
 }

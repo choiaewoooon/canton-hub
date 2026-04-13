@@ -115,6 +115,31 @@ export interface MarketEntry {
   contract_type?: "perpetual" | "futures";
 }
 
+export interface LivePrice {
+  source: string;
+  venue_type: "DEX" | "CEX";
+  market: "spot" | "perpetual" | "futures";
+  pair: string;
+  price: number;
+  api_source: string;
+}
+
+export interface PriceExtreme {
+  source: string;
+  venue_type: "DEX" | "CEX";
+  market: string;
+  price: number;
+}
+
+export interface RealtimePrices {
+  prices: LivePrice[];
+  lowest: PriceExtreme | null;
+  highest: PriceExtreme | null;
+  spread_pct: number;
+  spread_usd: number;
+  fetched_at: string | null;
+}
+
 export interface DexOI {
   name: string;
   symbol: string;

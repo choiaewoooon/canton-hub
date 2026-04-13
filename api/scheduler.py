@@ -12,6 +12,55 @@ CANTONSCAN_API_BASE = "https://fossil-outlook-levitate-gloomy.cantonscan.com"
 TIMESERIES_URL = f"{CANTONSCAN_API_BASE}/api/mining-rounds/timeseries?interval=day"
 
 
+async def collect_realtime_prices(cache: TTLCache):
+    """모든 거래소에서 5초마다 가격 수집 + 아비트라지 스프레드 계산."""
+    from datetime import datetime, timezone
+    from collectors.realtime_prices import collect_all_realtime_prices
+
+    try:
+        prices = await collect_all_realtime_prices()
+        if not prices:
+            return
+
+        # 가격 기준 정렬
+        sorted_prices = sorted(prices, key=lambda p: p.price)
+        lowest = sorted_prices[0]
+        highest = sorted_prices[-1]
+        spread_pct = ((highest.price - lowest.price) / lowest.price) * 100 if lowest.price > 0 else 0
+
+        result = {
+            "prices": [
+                {
+                    "source": p.source,
+                    "venue_type": p.venue_type,
+                    "market": p.market,
+                    "pair": p.pair,
+                    "price": p.price,
+                    "api_source": p.api_source,
+                }
+                for p in prices
+            ],
+            "lowest": {
+                "source": lowest.source,
+                "venue_type": lowest.venue_type,
+                "market": lowest.market,
+                "price": lowest.price,
+            },
+            "highest": {
+                "source": highest.source,
+                "venue_type": highest.venue_type,
+                "market": highest.market,
+                "price": highest.price,
+            },
+            "spread_pct": round(spread_pct, 4),
+            "spread_usd": round(highest.price - lowest.price, 6),
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+        }
+        cache.set("analytics:realtime-prices", result, ttl=10)
+    except Exception as e:
+        logger.error(f"Realtime prices failed: {e}")
+
+
 async def collect_exchanges(cache: TTLCache):
     """CoinGecko 웹사이트에서 spot + perpetuals + futures 데이터 스크래핑 + DEX OI 직접 수집."""
     from datetime import datetime, timezone
@@ -490,3 +539,7 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_governance, cache, 3600, "governance"))
     asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))
     asyncio.create_task(_loop(collect_exchanges, cache, 900, "exchanges"))  # 15분
+    asyncio.create_task(_loop(collect_realtime_prices, cache, 5, "realtime-prices"))  # 5초
+
+    # 즉시 1회 실행 — 첫 페이지 로드 시 빈 데이터 방지
+    asyncio.create_task(collect_realtime_prices(cache))

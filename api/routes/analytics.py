@@ -55,6 +55,19 @@ async def burn_breakdown(cache: TTLCache = Depends(get_cache)):
     }
 
 
+@router.get("/realtime-prices")
+async def realtime_prices(cache: TTLCache = Depends(get_cache)):
+    """5초마다 갱신되는 모든 거래소(DEX+CEX, spot+perp) Canton 가격."""
+    return cache.get("analytics:realtime-prices") or {
+        "prices": [],
+        "lowest": None,
+        "highest": None,
+        "spread_pct": 0,
+        "spread_usd": 0,
+        "fetched_at": None,
+    }
+
+
 @router.get("/exchanges")
 async def exchanges(cache: TTLCache = Depends(get_cache)):
     """CC가 거래되는 거래소 목록 + 거래량 + 파생상품 정보."""

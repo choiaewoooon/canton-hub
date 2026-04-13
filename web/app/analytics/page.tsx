@@ -7,6 +7,7 @@ import CumulativeChart from "@/components/analytics/cumulative-chart";
 import AmuletPriceChart from "@/components/analytics/amulet-price-chart";
 import BurnBreakdownCard from "@/components/analytics/burn-breakdown";
 import ExchangesSection from "@/components/analytics/exchanges-section";
+import ArbitrageTracker from "@/components/analytics/arbitrage-tracker";
 import { useLang } from "@/lib/use-lang";
 import { usePrice } from "@/lib/api";
 import { useRealtimePrice } from "@/lib/sse";
@@ -32,6 +33,9 @@ export default function AnalyticsPage() {
               : "Deep dive into Canton's reward distribution, tokenomics, and cumulative metrics."}
           </p>
         </div>
+
+        {/* Live Arbitrage Tracker — 5초 갱신 */}
+        <ArbitrageTracker lang={lang} />
 
         {/* Exchanges & Markets — 가장 자주 보는 정보 */}
         <div className="mb-5">
