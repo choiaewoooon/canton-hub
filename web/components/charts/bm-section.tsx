@@ -46,7 +46,13 @@ export default function BmSection({ network }: BmSectionProps) {
             <AreaChart data={bmData || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1c1c1f" />
               <XAxis dataKey="date" tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} />
+              <YAxis
+                tick={{ fill: "#52525b", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                domain={[(dataMin: number) => Math.min(dataMin * 0.9, 0.95), (dataMax: number) => Math.max(dataMax * 1.1, 1.05)]}
+                tickFormatter={(v: number) => v.toFixed(2)}
+              />
               <Tooltip
                 contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }}
                 labelStyle={{ color: "#a1a1aa" }}

@@ -101,34 +101,94 @@ async def _fetch_ohlc(days: str) -> list[dict]:
 
 async def collect_charts(cache: TTLCache):
     import httpx
-    # Price chart — 기간별 CoinGecko OHLC
-    try:
-        for period, days in [("24h", "1"), ("7d", "7"), ("1m", "30"), ("3m", "90")]:
-            try:
-                chart_data = await _fetch_ohlc(days)
-                cache.set(f"chart:price:{period}", chart_data, ttl=300)
-                logger.info(f"Price chart {period} cached: {len(chart_data)} candles")
-            except Exception as e:
-                logger.warning(f"Price chart {period} failed: {e}")
-    except Exception as e:
-        logger.error(f"Price chart failed: {e}")
+    import json
+    from pathlib import Path
 
-    # Burn + B/M chart
+    chart_cache_file = Path(__file__).parent.parent / "data" / "chart_cache.json"
+    chart_cache_file.parent.mkdir(exist_ok=True)
+
+    # 기존 파일 캐시 로드 (폴백용)
+    file_cache: dict = {}
+    if chart_cache_file.exists():
+        try:
+            file_cache = json.loads(chart_cache_file.read_text())
+        except Exception:
+            file_cache = {}
+
+    # Price chart — 기간별 CoinGecko OHLC (TTL 1시간)
+    price_success = False
+    for period, days in [("24h", "1"), ("7d", "7"), ("1m", "30"), ("3m", "90")]:
+        key = f"chart:price:{period}"
+        try:
+            chart_data = await _fetch_ohlc(days)
+            cache.set(key, chart_data, ttl=3600)
+            file_cache[key] = chart_data
+            price_success = True
+            logger.info(f"Price chart {period} cached: {len(chart_data)} candles")
+        except Exception as e:
+            logger.warning(f"Price chart {period} failed: {e} — trying file cache")
+            if key in file_cache:
+                cache.set(key, file_cache[key], ttl=3600)
+                logger.info(f"Price chart {period} loaded from file cache: {len(file_cache[key])} candles")
+
+    # 성공한 데이터를 파일에 저장
+    if price_success:
+        try:
+            chart_cache_file.write_text(json.dumps(file_cache, ensure_ascii=False))
+        except Exception as e:
+            logger.warning(f"Failed to save chart cache file: {e}")
+
+    # Burn + B/M chart — hour interval for 24h, day for others
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(TIMESERIES_URL)
-            resp.raise_for_status()
-            items = resp.json().get("data", [])
-        if items:
-            burn_data = [{"date": d["date"], "burn": d.get("burnAmount", 0), "cumulative_burn": d.get("cumulativeBurn", 0)} for d in items[-30:]]
-            bm_data = [{"date": d["date"], "ratio": round(d.get("burnAmount", 0) / d.get("mintAmount", 1), 4) if d.get("mintAmount") else 0} for d in items[-90:]]
+            # Hour interval (24h 기간용)
+            hour_resp = await client.get(f"{CANTONSCAN_API_BASE}/api/mining-rounds/timeseries?interval=hour")
+            hour_resp.raise_for_status()
+            hour_items = hour_resp.json().get("data", [])
+
+            # Day interval (7d/1m/3m 기간용)
+            day_resp = await client.get(TIMESERIES_URL)
+            day_resp.raise_for_status()
+            day_items = day_resp.json().get("data", [])
+
+        # 24h용 (hour interval, 최근 24개 시간)
+        if hour_items:
+            hour_slice = hour_items[-24:]
+
+            def fmt_hour(iso: str) -> str:
+                # 2026-04-13T01:00:00.000Z → 04/13 01:00
+                from datetime import datetime
+                try:
+                    dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+                    return dt.strftime("%m/%d %H:%M")
+                except Exception:
+                    return iso
+
+            burn_24h = [
+                {"date": fmt_hour(d["date"]), "burn": d.get("burnAmount", 0),
+                 "cumulative_burn": d.get("cumulativeBurn", 0)}
+                for d in hour_slice
+            ]
+            bm_24h = [
+                {"date": fmt_hour(d["date"]),
+                 "ratio": round(d.get("burnAmount", 0) / d.get("mintAmount", 1), 4) if d.get("mintAmount") else 0}
+                for d in hour_slice
+            ]
+            cache.set("chart:burn:24h", burn_24h, ttl=900)
+            cache.set("chart:bm-ratio:24h", bm_24h, ttl=900)
+            logger.info(f"Burn/BM 24h charts cached: {len(burn_24h)} hours")
+
+        # 7d / 1m / 3m용 (day interval)
+        if day_items:
+            burn_data = [{"date": d["date"], "burn": d.get("burnAmount", 0), "cumulative_burn": d.get("cumulativeBurn", 0)} for d in day_items[-90:]]
+            bm_data = [{"date": d["date"], "ratio": round(d.get("burnAmount", 0) / d.get("mintAmount", 1), 4) if d.get("mintAmount") else 0} for d in day_items[-90:]]
             cache.set("chart:burn:7d", burn_data[-7:], ttl=900)
-            cache.set("chart:burn:1m", burn_data, ttl=900)
-            cache.set("chart:burn:3m", [{"date": d["date"], "burn": d.get("burnAmount", 0), "cumulative_burn": d.get("cumulativeBurn", 0)} for d in items[-90:]], ttl=900)
+            cache.set("chart:burn:1m", burn_data[-30:], ttl=900)
+            cache.set("chart:burn:3m", burn_data, ttl=900)
             cache.set("chart:bm-ratio:7d", bm_data[-7:], ttl=900)
             cache.set("chart:bm-ratio:1m", bm_data[-30:], ttl=900)
             cache.set("chart:bm-ratio:3m", bm_data, ttl=900)
-            logger.info(f"Burn/BM charts cached: {len(burn_data)} days")
+            logger.info(f"Burn/BM day charts cached: {len(burn_data)} days")
     except Exception as e:
         logger.error(f"Burn chart failed: {e}")
 
@@ -164,7 +224,26 @@ async def collect_governance(cache: TTLCache):
         if data.fetched:
             cache.set("governance", {
                 "active_proposals": data.active_proposals,
-                "recent_cips": [{"number": c.number, "title": c.title, "status": c.status, "summary_ko": c.summary_ko, "summary_en": c.summary_en, "impact": c.impact, "github_url": c.github_url, "vote_url": c.vote_url} for c in data.recent_cips],
+                "total_final": data.total_final,
+                "history_stats": data.history_stats,
+                "recent_cips": [
+                    {
+                        "number": c.number,
+                        "title": c.title,
+                        "status": c.status,
+                        "category_key": c.category_key,
+                        "category_ko": c.category_ko,
+                        "category_en": c.category_en,
+                        "category_color": c.category_color,
+                        "summary_ko": c.summary_ko,
+                        "summary_en": c.summary_en,
+                        "impact_ko": c.impact_ko,
+                        "impact_en": c.impact_en,
+                        "github_url": c.github_url,
+                        "vote_url": c.vote_url,
+                    }
+                    for c in data.recent_cips
+                ],
             }, ttl=3600)
             logger.info(f"Governance cached: {data.active_proposals} active")
     except Exception as e:
@@ -198,27 +277,6 @@ def _relative_time(dt) -> str:
     return f"{seconds // 86400}d ago"
 
 
-async def run_all_collectors(cache: TTLCache):
-    await asyncio.gather(collect_price(cache), collect_network(cache), collect_charts(cache), collect_feed(cache), collect_governance(cache), return_exceptions=True)
-
-
-async def start_scheduler(cache: TTLCache):
-    # 빠른 데이터(가격, 네트워크)만 먼저 수집하고 서버 시작
-    logger.info("Running priority data collection (price + network)...")
-    await asyncio.gather(collect_price(cache), collect_network(cache), return_exceptions=True)
-    logger.info("Priority collection complete — server ready")
-
-    # 느린 데이터(차트, 피드, 거버넌스)는 백그라운드로
-    asyncio.create_task(_deferred_initial(cache))
-
-    async def _loop(fn, interval: int, name: str):
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                await fn(cache)
-            except Exception as e:
-                logger.error(f"Scheduled {name} failed: {e}")
-
 async def collect_homepage(cache: TTLCache):
     """CantonScan 홈페이지 스크래핑 (하루 1회). 완료 후 network 데이터 갱신."""
     try:
@@ -230,15 +288,53 @@ async def collect_homepage(cache: TTLCache):
         logger.error(f"Homepage scrape failed: {e}")
 
 
+async def run_all_collectors(cache: TTLCache):
+    await asyncio.gather(
+        collect_price(cache),
+        collect_network(cache),
+        collect_charts(cache),
+        collect_feed(cache),
+        collect_governance(cache),
+        return_exceptions=True,
+    )
+
+
+async def _loop(fn, cache: TTLCache, interval: int, name: str):
+    """주기적으로 collector를 실행하는 loop."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await fn(cache)
+        except Exception as e:
+            logger.error(f"Scheduled {name} failed: {e}")
+
+
 async def _deferred_initial(cache: TTLCache):
     """느린 collector들을 백그라운드에서 수집."""
     logger.info("Running deferred collection (charts, feed, governance, homepage)...")
-    await asyncio.gather(collect_charts(cache), collect_feed(cache), collect_governance(cache), collect_homepage(cache), return_exceptions=True)
+    await asyncio.gather(
+        collect_charts(cache),
+        collect_feed(cache),
+        collect_governance(cache),
+        collect_homepage(cache),
+        return_exceptions=True,
+    )
     logger.info("Deferred collection complete")
 
-    asyncio.create_task(_loop(collect_price, 30, "price"))
-    asyncio.create_task(_loop(collect_network, 300, "network"))
-    asyncio.create_task(_loop(collect_charts, 900, "charts"))
-    asyncio.create_task(_loop(collect_feed, 900, "feed"))
-    asyncio.create_task(_loop(collect_governance, 3600, "governance"))
-    asyncio.create_task(_loop(collect_homepage, 86400, "homepage"))  # 하루 1회
+
+async def start_scheduler(cache: TTLCache):
+    # 빠른 데이터(가격, 네트워크)만 먼저 수집하고 서버 시작
+    logger.info("Running priority data collection (price + network)...")
+    await asyncio.gather(collect_price(cache), collect_network(cache), return_exceptions=True)
+    logger.info("Priority collection complete — server ready")
+
+    # 느린 데이터(차트, 피드, 거버넌스)는 백그라운드로
+    asyncio.create_task(_deferred_initial(cache))
+
+    # 주기적 재수집 태스크 등록
+    asyncio.create_task(_loop(collect_price, cache, 30, "price"))
+    asyncio.create_task(_loop(collect_network, cache, 300, "network"))
+    asyncio.create_task(_loop(collect_charts, cache, 900, "charts"))
+    asyncio.create_task(_loop(collect_feed, cache, 900, "feed"))
+    asyncio.create_task(_loop(collect_governance, cache, 3600, "governance"))
+    asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))

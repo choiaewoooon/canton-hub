@@ -61,14 +61,28 @@ export interface CIPItem {
   number: string;
   title: string;
   status: string;
+  category_key: string;
+  category_ko: string;
+  category_en: string;
+  category_color: string;
   summary_ko: string;
   summary_en: string;
-  impact: string;
+  impact_ko: string;
+  impact_en: string;
   github_url: string;
   vote_url: string;
 }
 
+export interface HistoryStat {
+  count: number;
+  name_ko: string;
+  name_en: string;
+  color: string;
+}
+
 export interface GovernanceData {
   active_proposals: number;
+  total_final: number;
+  history_stats: Record<string, HistoryStat>;
   recent_cips: CIPItem[];
 }
