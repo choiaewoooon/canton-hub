@@ -1,29 +1,59 @@
 "use client";
 
-import { useBurnBreakdown } from "@/lib/api";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Cell,
+} from "recharts";
+import { useChart } from "@/lib/api";
 import { fmtCc } from "@/lib/format";
 
 interface Props {
   lang: string;
 }
 
+interface BurnPoint {
+  date?: string;
+  burn?: number;
+  cumulative_burn?: number;
+}
+
+const fmtMillions = (v: number) => {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
+  return v.toFixed(0);
+};
+
 export default function BurnBreakdownCard({ lang }: Props) {
-  const { data } = useBurnBreakdown();
+  const { data } = useChart("burn", "7d");
+  const points: BurnPoint[] = (data as BurnPoint[]) || [];
 
-  const fees = data?.burned_from_fees ?? 0;
-  const traffic = data?.burned_from_traffic ?? 0;
-  const total = fees + traffic;
-  const feesPct = total > 0 ? (fees / total) * 100 : 0;
-  const trafficPct = total > 0 ? (traffic / total) * 100 : 0;
+  // 7일 통계
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const todayBurn = last?.burn ?? 0;
+  const prevBurn = prev?.burn ?? 0;
+  const dayChange = prevBurn > 0 ? ((todayBurn - prevBurn) / prevBurn) * 100 : 0;
 
-  const cumFees = data?.cumulative_burned_from_fees ?? 0;
-  const cumTraffic = data?.cumulative_burned_from_traffic ?? 0;
+  const validBurns = points.map((p) => p.burn ?? 0).filter((b) => b > 0);
+  const avg7d = validBurns.length > 0 ? validBurns.reduce((a, b) => a + b, 0) / validBurns.length : 0;
+  const vsAvg = avg7d > 0 ? ((todayBurn - avg7d) / avg7d) * 100 : 0;
 
-  const title = lang === "ko" ? "오늘의 소각 분해" : "Today's Burn Breakdown";
+  const maxIdx = points.reduce(
+    (best, p, i) => ((p.burn ?? 0) > (points[best]?.burn ?? 0) ? i : best),
+    0
+  );
+
+  const title = lang === "ko" ? "일일 소각 활동 (7일)" : "Daily Burn Activity (7d)";
   const subtitle =
     lang === "ko"
-      ? "수수료 vs 트래픽 구매로부터의 소각 비율"
-      : "Burn split between fees and traffic purchases";
+      ? "Canton의 일일 소각량 추이와 오늘의 변화"
+      : "Daily burn trend and today's variance";
 
   return (
     <div className="bg-canton-card border border-canton-border rounded-[10px] p-5">
@@ -32,48 +62,67 @@ export default function BurnBreakdownCard({ lang }: Props) {
         <p className="text-[11px] text-zinc-500 mt-0.5">{subtitle}</p>
       </div>
 
-      <div className="flex h-10 rounded-md overflow-hidden gap-[2px] mb-4">
-        <div
-          className="flex items-center justify-center text-[12px] font-semibold text-white"
-          style={{
-            width: `${trafficPct || 100}%`,
-            background: "linear-gradient(90deg, #f97316, #fb923c)",
-          }}
-        >
-          Traffic {trafficPct.toFixed(1)}%
-        </div>
-        {feesPct > 0 && (
-          <div
-            className="flex items-center justify-center text-[12px] font-semibold text-white"
-            style={{
-              width: `${feesPct}%`,
-              background: "linear-gradient(90deg, #ef4444, #f87171)",
-            }}
-          >
-            Fees {feesPct.toFixed(1)}%
-          </div>
-        )}
+      {/* Chart */}
+      <div className="h-[160px] mb-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={points} margin={{ top: 10, right: 5, left: -10, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1c1c1f" vertical={false} />
+            <XAxis dataKey="date" tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis
+              tick={{ fill: "#52525b", fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={fmtMillions}
+            />
+            <Tooltip
+              contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: "#a1a1aa" }}
+              formatter={(v) => fmtCc(Number(v))}
+            />
+            <Bar dataKey="burn" radius={[4, 4, 0, 0]}>
+              {points.map((_, i) => (
+                <Cell
+                  key={i}
+                  fill={i === points.length - 1 ? "#fb923c" : i === maxIdx ? "#f97316" : "#fb923c80"}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-zinc-900 rounded-md p-3">
-          <div className="text-[10px] text-zinc-600 uppercase tracking-wider">
-            {lang === "ko" ? "트래픽 구매 (오늘)" : "Traffic Purchases (Today)"}
+      {/* 3 Stat cards */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-zinc-900 rounded-md p-2.5">
+          <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
+            {lang === "ko" ? "오늘" : "Today"}
           </div>
-          <div className="text-[15px] font-bold text-canton-burn mt-1">{fmtCc(traffic)}</div>
-          <div className="text-[10px] text-zinc-600 mt-1">
-            {lang === "ko" ? "누적: " : "Cumulative: "}
-            <span className="text-zinc-500">{fmtCc(cumTraffic)}</span>
+          <div className="text-[14px] font-bold text-canton-burn mt-0.5">{fmtCc(todayBurn)}</div>
+        </div>
+        <div className="bg-zinc-900 rounded-md p-2.5">
+          <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
+            {lang === "ko" ? "어제 대비" : "vs Yesterday"}
+          </div>
+          <div
+            className={`text-[14px] font-bold mt-0.5 ${
+              dayChange >= 0 ? "text-canton-up" : "text-canton-down"
+            }`}
+          >
+            {dayChange >= 0 ? "+" : ""}
+            {dayChange.toFixed(1)}%
           </div>
         </div>
-        <div className="bg-zinc-900 rounded-md p-3">
-          <div className="text-[10px] text-zinc-600 uppercase tracking-wider">
-            {lang === "ko" ? "수수료 (오늘)" : "Fees (Today)"}
+        <div className="bg-zinc-900 rounded-md p-2.5">
+          <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
+            {lang === "ko" ? "7일 평균 대비" : "vs 7d Avg"}
           </div>
-          <div className="text-[15px] font-bold text-canton-down mt-1">{fmtCc(fees)}</div>
-          <div className="text-[10px] text-zinc-600 mt-1">
-            {lang === "ko" ? "누적: " : "Cumulative: "}
-            <span className="text-zinc-500">{fmtCc(cumFees)}</span>
+          <div
+            className={`text-[14px] font-bold mt-0.5 ${
+              vsAvg >= 0 ? "text-canton-up" : "text-canton-down"
+            }`}
+          >
+            {vsAvg >= 0 ? "+" : ""}
+            {vsAvg.toFixed(1)}%
           </div>
         </div>
       </div>
@@ -81,8 +130,8 @@ export default function BurnBreakdownCard({ lang }: Props) {
       <div className="mt-3 pt-3 border-t border-canton-border">
         <p className="text-[11px] text-zinc-500 leading-relaxed">
           {lang === "ko"
-            ? "💡 Canton의 소각은 대부분 트래픽 구매(네트워크 사용량)에서 발생합니다. CIP-0078 이후 일반 수수료 소각은 폐지되었습니다."
-            : "💡 Most Canton burns come from traffic purchases (network usage). CIP-0078 removed general fee burns."}
+            ? "💡 Canton의 모든 소각은 트래픽 구매(네트워크 사용량)에서 발생합니다. CIP-0078 이후 일반 수수료 소각은 폐지되었으므로, 일일 소각량 = 실제 네트워크 활동량입니다."
+            : "💡 All Canton burns come from traffic purchases (network usage). Since CIP-0078 removed fee burns, daily burn directly reflects real network activity."}
         </p>
       </div>
     </div>
