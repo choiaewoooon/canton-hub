@@ -80,6 +80,32 @@ export interface HistoryStat {
   color: string;
 }
 
+export interface RewardSplitPoint {
+  date: string;
+  app: number;
+  validator: number;
+  super_validator: number;
+}
+
+export interface AmuletPricePoint {
+  date: string;
+  price: number;
+}
+
+export interface CumulativePoint {
+  date: string;
+  cumulative_mint: number;
+  cumulative_burn: number;
+  cumulative_supply: number;
+}
+
+export interface BurnBreakdown {
+  burned_from_fees: number | null;
+  burned_from_traffic: number | null;
+  cumulative_burned_from_fees: number | null;
+  cumulative_burned_from_traffic: number | null;
+}
+
 export interface GovernanceData {
   active_proposals: number;
   total_final: number;

@@ -1,5 +1,16 @@
 import useSWR from "swr";
-import type { PriceData, NetworkData, NetworkStatus, ChartPoint, FeedData, GovernanceData } from "./types";
+import type {
+  PriceData,
+  NetworkData,
+  NetworkStatus,
+  ChartPoint,
+  FeedData,
+  GovernanceData,
+  RewardSplitPoint,
+  AmuletPricePoint,
+  CumulativePoint,
+  BurnBreakdown,
+} from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -27,4 +38,28 @@ export function useFeed(lang: string) {
 
 export function useGovernance() {
   return useSWR<GovernanceData>(`${API}/api/governance`, fetcher, { refreshInterval: 3_600_000 });
+}
+
+export function useRewardSplit(period: string) {
+  return useSWR<RewardSplitPoint[]>(`${API}/api/analytics/reward-split?period=${period}`, fetcher, {
+    refreshInterval: 900_000,
+  });
+}
+
+export function useAmuletPrice(period: string) {
+  return useSWR<AmuletPricePoint[]>(`${API}/api/analytics/amulet-price?period=${period}`, fetcher, {
+    refreshInterval: 900_000,
+  });
+}
+
+export function useCumulative(period: string) {
+  return useSWR<CumulativePoint[]>(`${API}/api/analytics/cumulative?period=${period}`, fetcher, {
+    refreshInterval: 900_000,
+  });
+}
+
+export function useBurnBreakdown() {
+  return useSWR<BurnBreakdown>(`${API}/api/analytics/burn-breakdown`, fetcher, {
+    refreshInterval: 900_000,
+  });
 }

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.dependencies import get_cache
-from api.routes import price, network, chart, feed, governance
+from api.routes import price, network, chart, feed, governance, analytics
 from api.scheduler import start_scheduler
 
 
@@ -23,6 +23,7 @@ app.include_router(network.router)
 app.include_router(chart.router)
 app.include_router(feed.router)
 app.include_router(governance.router)
+app.include_router(analytics.router)
 
 
 @app.get("/api/health")

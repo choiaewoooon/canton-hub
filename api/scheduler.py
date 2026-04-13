@@ -187,6 +187,55 @@ async def collect_charts(cache: TTLCache):
             cache.set("chart:burn:3m", burn_data, ttl=900)
             cache.set("chart:bm-ratio:7d", bm_data[-7:], ttl=900)
             cache.set("chart:bm-ratio:1m", bm_data[-30:], ttl=900)
+
+            # === Analytics 데이터 ===
+            # 1. Reward Split (App / Validator / Super Validator)
+            reward_data = [
+                {
+                    "date": d["date"],
+                    "app": round(d.get("appRewards", 0)),
+                    "validator": round(d.get("validatorRewards", 0)),
+                    "super_validator": round(d.get("superValidatorRewards", 0)),
+                }
+                for d in day_items[-90:]
+            ]
+            cache.set("analytics:reward-split:7d", reward_data[-7:], ttl=900)
+            cache.set("analytics:reward-split:1m", reward_data[-30:], ttl=900)
+            cache.set("analytics:reward-split:3m", reward_data, ttl=900)
+
+            # 2. Amulet Price
+            amulet_data = [
+                {"date": d["date"], "price": round(d.get("avgAmuletPrice", 0), 6)}
+                for d in day_items[-90:]
+            ]
+            cache.set("analytics:amulet-price:7d", amulet_data[-7:], ttl=900)
+            cache.set("analytics:amulet-price:1m", amulet_data[-30:], ttl=900)
+            cache.set("analytics:amulet-price:3m", amulet_data, ttl=900)
+
+            # 3. Cumulative Mint / Burn / Supply
+            cum_data = [
+                {
+                    "date": d["date"],
+                    "cumulative_mint": round(d.get("cumulativeMint", 0)),
+                    "cumulative_burn": round(d.get("cumulativeBurn", 0)),
+                    "cumulative_supply": round(d.get("cumulativeSupply", 0)),
+                }
+                for d in day_items[-90:]
+            ]
+            cache.set("analytics:cumulative:7d", cum_data[-7:], ttl=900)
+            cache.set("analytics:cumulative:1m", cum_data[-30:], ttl=900)
+            cache.set("analytics:cumulative:3m", cum_data, ttl=900)
+
+            # 4. Burn Breakdown (오늘 기준)
+            latest = day_items[-1]
+            cache.set("analytics:burn-breakdown", {
+                "burned_from_fees": latest.get("burnedFromFees", 0),
+                "burned_from_traffic": latest.get("burnedFromTrafficPurchases", 0),
+                "cumulative_burned_from_fees": latest.get("cumulativeBurnedFromFees", 0),
+                "cumulative_burned_from_traffic": latest.get("cumulativeBurnedFromTrafficPurchases", 0),
+            }, ttl=900)
+
+            logger.info(f"Analytics charts cached: {len(reward_data)} days")
             cache.set("chart:bm-ratio:3m", bm_data, ttl=900)
             logger.info(f"Burn/BM day charts cached: {len(burn_data)} days")
     except Exception as e:

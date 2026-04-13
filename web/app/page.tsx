@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Navbar from "@/components/nav/navbar";
+import Footer from "@/components/footer";
 import HeroPrice from "@/components/hero/hero-price";
 import KpiGrid from "@/components/kpi/kpi-grid";
 import ChartArea from "@/components/charts/chart-area";
@@ -11,17 +11,18 @@ import NetworkStatusCard from "@/components/network/network-status";
 import GovernanceWidget from "@/components/governance/governance-widget";
 import { usePrice, useNetwork } from "@/lib/api";
 import { useRealtimePrice } from "@/lib/sse";
+import { useLang } from "@/lib/use-lang";
 
 export default function Dashboard() {
-  const [lang, setLang] = useState("ko");
+  const [lang, setLang] = useLang();
   const { data: swrPrice } = usePrice();
   const { data: realtimePrice, connected } = useRealtimePrice(swrPrice);
   const { data: networkData } = useNetwork();
 
   return (
-    <div className="min-h-screen bg-canton-bg">
+    <div className="min-h-screen bg-canton-bg flex flex-col">
       <Navbar lang={lang} onLangChange={setLang} connected={connected} />
-      <main className="max-w-[1200px] mx-auto px-6 py-5">
+      <main className="max-w-[1200px] w-full mx-auto px-6 py-5 flex-1">
         <HeroPrice data={realtimePrice} />
         <KpiGrid data={networkData} />
         <ChartArea />
@@ -34,9 +35,7 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
-      <div className="text-center py-5 text-zinc-700 text-xs">
-        Phase 2: Analytics · Feed · Governance Details
-      </div>
+      <Footer lang={lang} />
     </div>
   );
 }
