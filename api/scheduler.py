@@ -13,118 +13,104 @@ TIMESERIES_URL = f"{CANTONSCAN_API_BASE}/api/mining-rounds/timeseries?interval=d
 
 
 async def collect_exchanges(cache: TTLCache):
-    """CoinGecko에서 CC 거래소 + 파생상품 정보 수집."""
-    import httpx
-    import config as cfg
+    """CoinGecko 웹사이트에서 spot + perpetuals + futures 데이터 스크래핑 + DEX OI 직접 수집."""
     from datetime import datetime, timezone
-
-    headers = {"Accept": "application/json"}
-    if cfg.COINGECKO_API_KEY:
-        headers["x-cg-demo-api-key"] = cfg.COINGECKO_API_KEY
+    from collectors.coingecko_scraper import scrape_coingecko_markets, load_cached_markets
+    from collectors.dex_oi_collector import collect_all_dex_oi
 
     try:
-        # 1. Spot 거래소 (CC tickers)
-        async with httpx.AsyncClient(timeout=20, headers=headers) as client:
-            resp = await client.get(
-                f"{cfg.COINGECKO_API_URL}/coins/{cfg.COINGECKO_COIN_ID}/tickers",
-                params={"include_exchange_logo": "true"},
-            )
-            resp.raise_for_status()
-            tickers_data = resp.json()
+        # 병렬 수집: CoinGecko scrape + DEX OI APIs
+        scrape_task = asyncio.create_task(scrape_coingecko_markets())
+        dex_oi_task = asyncio.create_task(collect_all_dex_oi())
+        data, dex_oi_list = await asyncio.gather(scrape_task, dex_oi_task)
 
-        tickers = tickers_data.get("tickers", [])
-        spot_exchanges: dict[str, dict] = {}  # 거래소별 집계
+        spot = data.get("spot", [])
+        perps = data.get("perpetuals", [])
+        futures = data.get("futures", [])
 
-        for t in tickers:
-            market = t.get("market", {})
-            name = market.get("name", "Unknown")
-            identifier = market.get("identifier", "")
-            logo = market.get("logo", "")
-            base = t.get("base", "")
-            target = t.get("target", "")
-            vol_usd = (t.get("converted_volume", {}) or {}).get("usd") or 0
-            last = (t.get("converted_last", {}) or {}).get("usd") or 0
-            trust = t.get("trust_score") or "unknown"
-            url = t.get("trade_url", "")
-            is_anomaly = t.get("is_anomaly", False)
-            is_stale = t.get("is_stale", False)
+        total_spot_vol = sum(e.get("volume_24h_usd", 0) for e in spot)
+        total_perp_vol = sum(e.get("volume_24h_usd", 0) for e in perps)
+        total_futures_vol = sum(e.get("volume_24h_usd", 0) for e in futures)
+        total_deriv_vol = total_perp_vol + total_futures_vol
 
-            if is_anomaly or is_stale:
-                continue
-
-            # 같은 거래소의 여러 페어를 합산
-            if name not in spot_exchanges:
-                spot_exchanges[name] = {
-                    "name": name,
-                    "identifier": identifier,
-                    "logo": logo,
-                    "volume_usd": 0,
-                    "pairs": [],
-                    "trust_scores": [],
-                    "trade_url": url,
-                    "last_price": last,
-                }
-            spot_exchanges[name]["volume_usd"] += vol_usd
-            spot_exchanges[name]["pairs"].append({
-                "pair": f"{base}/{target}",
-                "volume_usd": vol_usd,
-                "last_price": last,
-                "trust": trust,
-            })
-            if trust != "unknown":
-                spot_exchanges[name]["trust_scores"].append(trust)
-
-        spot_list = sorted(spot_exchanges.values(), key=lambda x: -x["volume_usd"])
-        total_spot_vol = sum(e["volume_usd"] for e in spot_list)
-
-        # 2. Derivatives — /derivatives endpoint (Canton perp tickers)
+        # Combine derivatives for unified view
         derivatives = []
-        total_deriv_vol = 0
-        total_oi = 0
-        try:
-            async with httpx.AsyncClient(timeout=20, headers=headers) as client:
-                deriv_resp = await client.get(f"{cfg.COINGECKO_API_URL}/derivatives", params={"include_tickers": "all"})
-                deriv_resp.raise_for_status()
-                all_derivs = deriv_resp.json()
+        for p in perps:
+            derivatives.append({**p, "contract_type": "perpetual"})
+        for f in futures:
+            derivatives.append({**f, "contract_type": "futures"})
+        derivatives.sort(key=lambda x: -x.get("volume_24h_usd", 0))
 
-            # Filter Canton-related (CC, CANTON)
-            for d in all_derivs:
-                sym = (d.get("symbol") or "").upper()
-                base = (d.get("base") or "").upper()
-                if sym == "CC" or sym == "CANTONUSDT" or "CANTON" in sym or base == "CC":
-                    vol = (d.get("converted_volume", {}) or {}).get("usd") or 0
-                    oi = d.get("open_interest") or 0
-                    derivatives.append({
-                        "market": d.get("market", "Unknown"),
-                        "symbol": d.get("symbol"),
-                        "contract_type": d.get("contract_type", "perpetual"),
-                        "volume_usd": vol,
-                        "open_interest_usd": oi,
-                        "funding_rate": d.get("funding_rate"),
-                        "last_price": d.get("last"),
-                    })
-                    total_deriv_vol += vol
-                    total_oi += oi
-        except Exception as e:
-            logger.warning(f"Derivatives fetch failed: {e}")
+        # DEX OI list → dicts
+        dex_oi = [
+            {
+                "name": d.name,
+                "symbol": d.symbol,
+                "open_interest_base": d.open_interest_base,
+                "open_interest_usd": d.open_interest_usd,
+                "mark_price": d.mark_price,
+                "funding_rate": d.funding_rate,
+                "daily_volume_usd": d.daily_volume_usd,
+                "max_leverage": d.max_leverage,
+                "api_source": d.api_source,
+            }
+            for d in dex_oi_list
+        ]
+        total_oi_usd = sum(d["open_interest_usd"] for d in dex_oi)
 
         result = {
-            "spot": spot_list[:30],
-            "derivatives": derivatives[:20],
+            "spot": spot[:30],
+            "derivatives": derivatives[:30],
+            "dex_oi": dex_oi,
             "total_spot_volume_usd": total_spot_vol,
             "total_derivatives_volume_usd": total_deriv_vol,
-            "total_open_interest_usd": total_oi,
-            "spot_exchange_count": len(spot_list),
+            "total_perpetuals_volume_usd": total_perp_vol,
+            "total_futures_volume_usd": total_futures_vol,
+            "total_open_interest_usd": total_oi_usd,
+            "spot_exchange_count": len(spot),
             "derivatives_count": len(derivatives),
+            "perpetuals_count": len(perps),
+            "futures_count": len(futures),
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
         cache.set("analytics:exchanges", result, ttl=900)
         logger.info(
-            f"Exchanges cached: {len(spot_list)} spot, {len(derivatives)} deriv, "
-            f"total spot vol ${total_spot_vol:,.0f}, OI ${total_oi:,.0f}"
+            f"Exchanges: {len(spot)} spot, {len(perps)} perps, {len(futures)} futures, "
+            f"DEX OI {len(dex_oi)} sources (${total_oi_usd:,.0f})"
         )
     except Exception as e:
-        logger.error(f"Exchanges collection failed: {e}")
+        logger.error(f"Exchanges scraping failed: {e}")
+        # 파일 캐시 폴백
+        try:
+            from collectors.coingecko_scraper import load_cached_markets
+            cached = load_cached_markets()
+            if cached:
+                spot = cached.get("spot", [])
+                perps = cached.get("perpetuals", [])
+                futures = cached.get("futures", [])
+                derivatives = []
+                for p in perps:
+                    derivatives.append({**p, "contract_type": "perpetual"})
+                for f in futures:
+                    derivatives.append({**f, "contract_type": "futures"})
+                derivatives.sort(key=lambda x: -x.get("volume_24h_usd", 0))
+                cache.set("analytics:exchanges", {
+                    "spot": spot[:30],
+                    "derivatives": derivatives[:30],
+                    "total_spot_volume_usd": sum(e.get("volume_24h_usd", 0) for e in spot),
+                    "total_derivatives_volume_usd": sum(e.get("volume_24h_usd", 0) for e in derivatives),
+                    "total_perpetuals_volume_usd": sum(e.get("volume_24h_usd", 0) for e in perps),
+                    "total_futures_volume_usd": sum(e.get("volume_24h_usd", 0) for e in futures),
+                    "total_open_interest_usd": 0,
+                    "spot_exchange_count": len(spot),
+                    "derivatives_count": len(derivatives),
+                    "perpetuals_count": len(perps),
+                    "futures_count": len(futures),
+                    "fetched_at": cached.get("fetched_at"),
+                }, ttl=900)
+                logger.info("Loaded exchanges from file cache fallback")
+        except Exception as fe:
+            logger.error(f"Fallback load failed: {fe}")
 
 
 async def collect_price(cache: TTLCache):

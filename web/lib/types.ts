@@ -99,42 +99,47 @@ export interface CumulativePoint {
   cumulative_supply: number;
 }
 
-export interface ExchangePair {
+export interface MarketEntry {
+  rank: number;
+  exchange: string;
+  type: "CEX" | "DEX" | "";
   pair: string;
-  volume_usd: number;
-  last_price: number;
-  trust: string;
-}
-
-export interface SpotExchange {
-  name: string;
-  identifier: string;
+  price: number;
+  spread_pct: number;
+  depth_plus_2pct: number;
+  depth_minus_2pct: number;
+  volume_24h_usd: number;
+  volume_pct: number;
   logo: string;
-  volume_usd: number;
-  pairs: ExchangePair[];
-  trust_scores: string[];
   trade_url: string;
-  last_price: number;
+  contract_type?: "perpetual" | "futures";
 }
 
-export interface DerivativeMarket {
-  market: string;
+export interface DexOI {
+  name: string;
   symbol: string;
-  contract_type: string;
-  volume_usd: number;
+  open_interest_base: number;
   open_interest_usd: number;
+  mark_price: number;
   funding_rate: number | null;
-  last_price: number | null;
+  daily_volume_usd: number;
+  max_leverage: number | null;
+  api_source: string;
 }
 
 export interface ExchangesData {
-  spot: SpotExchange[];
-  derivatives: DerivativeMarket[];
+  spot: MarketEntry[];
+  derivatives: MarketEntry[];
+  dex_oi: DexOI[];
   total_spot_volume_usd: number;
   total_derivatives_volume_usd: number;
+  total_perpetuals_volume_usd: number;
+  total_futures_volume_usd: number;
   total_open_interest_usd: number;
   spot_exchange_count: number;
   derivatives_count: number;
+  perpetuals_count: number;
+  futures_count: number;
   fetched_at: string | null;
 }
 
