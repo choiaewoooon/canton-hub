@@ -122,6 +122,9 @@ export interface LivePrice {
   pair: string;
   price: number;
   api_source: string;
+  depth_plus_2pct?: number;
+  depth_minus_2pct?: number;
+  trade_url?: string;
 }
 
 export interface PriceExtreme {

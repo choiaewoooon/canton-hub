@@ -55,17 +55,80 @@ async def burn_breakdown(cache: TTLCache = Depends(get_cache)):
     }
 
 
+# Realtime source → CoinGecko scraper exchange name mapping for depth enrichment
+# Format: (live_source, live_market) → (scraper_exchange_name, scraper_bucket)
+_DEPTH_SOURCE_MAP: dict[tuple[str, str], tuple[str, str]] = {
+    # DEX Perp
+    ("Hyperliquid", "perpetual"): ("Hyperliquid (Futures)", "derivatives"),
+    ("Extended", "perpetual"): ("Extended", "derivatives"),
+    ("Aster", "perpetual"): ("Aster (Futures)", "derivatives"),
+    ("Lighter", "perpetual"): ("Lighter", "derivatives"),
+    # CEX Spot
+    ("Bybit", "spot"): ("Bybit", "spot"),
+    ("OKX", "spot"): ("OKX", "spot"),
+    ("Kraken", "spot"): ("Kraken", "spot"),
+    # CEX Perp
+    ("Bybit Perp", "perpetual"): ("Bybit (Futures)", "derivatives"),
+    ("OKX Perp", "perpetual"): ("OKX (Futures)", "derivatives"),
+    ("Binance Perp", "perpetual"): ("Binance (Futures)", "derivatives"),
+}
+
+
+def _enrich_with_depth(rt_data: dict, exchanges_data: dict | None) -> dict:
+    """Realtime 가격에 exchanges cache의 +2%/-2% depth를 합쳐서 반환."""
+    if not exchanges_data:
+        return rt_data
+
+    # Build lookup: (exchange_name, bucket) → first matching entry with CC pair
+    lookups: dict[tuple[str, str], dict] = {}
+    for bucket in ("spot", "derivatives"):
+        for entry in exchanges_data.get(bucket, []):
+            key = (entry.get("exchange"), bucket)
+            # Take the first (highest rank) match per exchange
+            if key not in lookups:
+                lookups[key] = entry
+
+    enriched_prices = []
+    for p in rt_data.get("prices", []):
+        source = p.get("source", "")
+        market = p.get("market", "")
+        map_key = (source, market)
+        mapping = _DEPTH_SOURCE_MAP.get(map_key)
+        depth_plus = 0
+        depth_minus = 0
+        trade_url = ""
+        if mapping:
+            exchange_data = lookups.get(mapping)
+            if exchange_data:
+                depth_plus = exchange_data.get("depth_plus_2pct", 0) or 0
+                depth_minus = exchange_data.get("depth_minus_2pct", 0) or 0
+                trade_url = exchange_data.get("trade_url", "") or ""
+        enriched_prices.append({
+            **p,
+            "depth_plus_2pct": depth_plus,
+            "depth_minus_2pct": depth_minus,
+            "trade_url": trade_url,
+        })
+
+    return {**rt_data, "prices": enriched_prices}
+
+
 @router.get("/realtime-prices")
 async def realtime_prices(cache: TTLCache = Depends(get_cache)):
-    """5초마다 갱신되는 모든 거래소(DEX+CEX, spot+perp) Canton 가격."""
-    return cache.get("analytics:realtime-prices") or {
-        "prices": [],
-        "lowest": None,
-        "highest": None,
-        "spread_pct": 0,
-        "spread_usd": 0,
-        "fetched_at": None,
-    }
+    """5초마다 갱신되는 모든 거래소(DEX+CEX, spot+perp) Canton 가격.
+    Exchanges cache의 +2%/-2% depth와 trade_url도 함께 반환."""
+    rt = cache.get("analytics:realtime-prices")
+    if not rt:
+        return {
+            "prices": [],
+            "lowest": None,
+            "highest": None,
+            "spread_pct": 0,
+            "spread_usd": 0,
+            "fetched_at": None,
+        }
+    exchanges = cache.get("analytics:exchanges")
+    return _enrich_with_depth(rt, exchanges)
 
 
 @router.get("/exchanges")

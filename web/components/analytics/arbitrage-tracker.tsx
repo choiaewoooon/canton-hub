@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRealtimePrices } from "@/lib/api";
 import type { LivePrice } from "@/lib/types";
+import { fmtLargeUsd } from "@/lib/format";
 
 interface Props {
   lang: string;
@@ -91,8 +92,12 @@ function PriceCard({
 
   const venueLabel = VENUE_LABELS[entry.venue_type] || { ko: entry.venue_type, en: entry.venue_type };
   const marketLabel = MARKET_LABELS[entry.market] || { ko: entry.market, en: entry.market };
-  const tradeUrl = getTradeUrl(entry.source);
+  // Prefer backend-provided trade_url (from exchanges scraper), fall back to hardcoded map
+  const tradeUrl = entry.trade_url && entry.trade_url.length > 0 ? entry.trade_url : getTradeUrl(entry.source);
   const hasLink = tradeUrl !== "#";
+  const depthPlus = entry.depth_plus_2pct ?? 0;
+  const depthMinus = entry.depth_minus_2pct ?? 0;
+  const hasDepth = depthPlus > 0 || depthMinus > 0;
 
   const hoverRing = isHighest
     ? "hover:border-canton-up"
@@ -169,6 +174,31 @@ function PriceCard({
       </div>
 
       <div className="text-[9px] text-zinc-600 mt-0.5">{entry.pair}</div>
+
+      {/* +2% / -2% Depth (order book liquidity) */}
+      {hasDepth && (
+        <div className="mt-2 pt-2 border-t border-canton-border/50">
+          <div className="flex items-center justify-between text-[9px]">
+            <span className="text-zinc-600 uppercase tracking-wider">
+              {lang === "ko" ? "2% 호가창" : "2% Depth"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between mt-0.5 text-[10px]">
+            <span
+              className="text-canton-up font-semibold"
+              title={lang === "ko" ? "매수호가 +2% 범위 유동성" : "Bid side +2% liquidity"}
+            >
+              +{fmtLargeUsd(depthPlus)}
+            </span>
+            <span
+              className="text-canton-down font-semibold"
+              title={lang === "ko" ? "매도호가 -2% 범위 유동성" : "Ask side -2% liquidity"}
+            >
+              −{fmtLargeUsd(depthMinus)}
+            </span>
+          </div>
+        </div>
+      )}
     </a>
   );
 }
