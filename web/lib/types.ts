@@ -171,6 +171,24 @@ export interface ExchangesData {
   fetched_at: string | null;
 }
 
+export interface Holder {
+  party_id: string;
+  organization: string;
+  category: "super_validator" | "validator" | "app" | "unknown";
+  available_balance: number;
+  locked_balance: number;
+  total_balance: number;
+}
+
+export interface HoldersData {
+  holders: Holder[];
+  total_tracked_balance: number;
+  total_count: number;
+  top1_share_pct: number;
+  top10_share_pct: number;
+  fetched_at: string | null;
+}
+
 export interface BurnBreakdown {
   burned_from_fees: number | null;
   burned_from_traffic: number | null;

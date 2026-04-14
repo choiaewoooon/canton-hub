@@ -12,6 +12,7 @@ import type {
   BurnBreakdown,
   ExchangesData,
   RealtimePrices,
+  HoldersData,
 } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -76,5 +77,11 @@ export function useRealtimePrices() {
   return useSWR<RealtimePrices>(`${API}/api/analytics/realtime-prices`, fetcher, {
     refreshInterval: 5_000,
     revalidateOnFocus: false,
+  });
+}
+
+export function useHolders() {
+  return useSWR<HoldersData>(`${API}/api/analytics/holders`, fetcher, {
+    refreshInterval: 3_600_000, // 1h
   });
 }

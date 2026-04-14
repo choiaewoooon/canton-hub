@@ -8,6 +8,7 @@ import AmuletPriceChart from "@/components/analytics/amulet-price-chart";
 import BurnBreakdownCard from "@/components/analytics/burn-breakdown";
 import ExchangesSection from "@/components/analytics/exchanges-section";
 import ArbitrageTracker from "@/components/analytics/arbitrage-tracker";
+import MajorHolders from "@/components/analytics/major-holders";
 import { useLang } from "@/lib/use-lang";
 import { usePrice } from "@/lib/api";
 import { useRealtimePrice } from "@/lib/sse";
@@ -58,33 +59,9 @@ export default function AnalyticsPage() {
           <BurnBreakdownCard lang={lang} />
         </div>
 
-        {/* Note about future features */}
-        <div className="bg-canton-card/50 border border-dashed border-canton-border rounded-[10px] p-5 mt-6">
-          <h3 className="text-[13px] font-semibold text-zinc-300 mb-2">
-            {lang === "ko" ? "🚧 추가 예정" : "🚧 Coming Soon"}
-          </h3>
-          <ul className="text-[12px] text-zinc-500 space-y-1.5 list-disc list-inside">
-            <li>
-              {lang === "ko"
-                ? "Validator / Super Validator 리더보드 (스테이크·보상·업타임 기준)"
-                : "Validator / Super Validator leaderboard (stake, rewards, uptime)"}
-            </li>
-            <li>
-              {lang === "ko"
-                ? "Top Apps by Rewards — 30일 기준 앱별 누적 보상 랭킹"
-                : "Top Apps by Rewards — 30-day cumulative ranking"}
-            </li>
-            <li>
-              {lang === "ko"
-                ? "주요 CC 홀더 (Brale, Broadridge, GSF 등 기관 보유량)"
-                : "Major CC holders (Brale, Broadridge, GSF — institutional holdings)"}
-            </li>
-            <li>
-              {lang === "ko"
-                ? "시간대별 트랜잭션 활동 히트맵"
-                : "Hourly transaction activity heatmap"}
-            </li>
-          </ul>
+        {/* Major CC Holders — 온체인 데이터 기반 */}
+        <div className="mb-5">
+          <MajorHolders lang={lang} />
         </div>
       </main>
 

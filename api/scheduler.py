@@ -476,6 +476,51 @@ def _relative_time(dt) -> str:
     return f"{seconds // 86400}d ago"
 
 
+async def collect_holders(cache: TTLCache):
+    """Major CC Holders 수집 — CantonScan API의 validator/SV/app party balance 병렬 조회."""
+    from collectors.holders_collector import collect_major_holders, load_cached_holders
+    try:
+        holders = await collect_major_holders()
+        if holders:
+            # Convert dataclass → dict for cache
+            holder_dicts = [
+                {
+                    "party_id": h.party_id,
+                    "organization": h.organization,
+                    "category": h.category,
+                    "available_balance": h.available_balance,
+                    "locked_balance": h.locked_balance,
+                    "total_balance": h.total_balance,
+                }
+                for h in holders
+            ]
+            total = sum(h["total_balance"] for h in holder_dicts)
+            cache.set("analytics:holders", {
+                "holders": holder_dicts[:50],  # Top 50
+                "total_tracked_balance": total,
+                "total_count": len(holder_dicts),
+                "top1_share_pct": (holder_dicts[0]["total_balance"] / total * 100) if holder_dicts and total > 0 else 0,
+                "top10_share_pct": (sum(h["total_balance"] for h in holder_dicts[:10]) / total * 100) if total > 0 else 0,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+            }, ttl=3700)  # 1h + buffer
+            logger.info(f"Holders cached: {len(holder_dicts)} total, top1 = {holder_dicts[0]['organization']}")
+    except Exception as e:
+        logger.error(f"Holders collection failed: {e}")
+        # Fallback to file cache
+        cached = load_cached_holders()
+        if cached:
+            total = sum(h["total_balance"] for h in cached)
+            cache.set("analytics:holders", {
+                "holders": cached[:50],
+                "total_tracked_balance": total,
+                "total_count": len(cached),
+                "top1_share_pct": (cached[0]["total_balance"] / total * 100) if cached and total > 0 else 0,
+                "top10_share_pct": (sum(h["total_balance"] for h in cached[:10]) / total * 100) if total > 0 else 0,
+                "fetched_at": None,
+            }, ttl=3700)
+            logger.info(f"Holders loaded from file cache: {len(cached)}")
+
+
 async def collect_homepage(cache: TTLCache):
     """CantonScan 홈페이지 스크래핑 (하루 1회). 완료 후 network 데이터 갱신."""
     try:
@@ -510,13 +555,14 @@ async def _loop(fn, cache: TTLCache, interval: int, name: str):
 
 async def _deferred_initial(cache: TTLCache):
     """느린 collector들을 백그라운드에서 수집."""
-    logger.info("Running deferred collection (charts, feed, governance, homepage, exchanges)...")
+    logger.info("Running deferred collection (charts, feed, governance, homepage, exchanges, holders)...")
     await asyncio.gather(
         collect_charts(cache),
         collect_feed(cache),
         collect_governance(cache),
         collect_homepage(cache),
         collect_exchanges(cache),
+        collect_holders(cache),
         return_exceptions=True,
     )
     logger.info("Deferred collection complete")
@@ -540,6 +586,7 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))
     asyncio.create_task(_loop(collect_exchanges, cache, 900, "exchanges"))  # 15분
     asyncio.create_task(_loop(collect_realtime_prices, cache, 5, "realtime-prices"))  # 5초
+    asyncio.create_task(_loop(collect_holders, cache, 3600, "holders"))  # 1시간
 
     # 즉시 1회 실행 — 첫 페이지 로드 시 빈 데이터 방지
     asyncio.create_task(collect_realtime_prices(cache))

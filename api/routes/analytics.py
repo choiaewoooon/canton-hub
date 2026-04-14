@@ -46,6 +46,19 @@ async def cumulative(
     return cache.get(f"analytics:cumulative:{period}") or _empty(period)
 
 
+@router.get("/holders")
+async def holders(cache: TTLCache = Depends(get_cache)):
+    """Major CC Holders — CantonScan 온체인 balance 기반 top holders."""
+    return cache.get("analytics:holders") or {
+        "holders": [],
+        "total_tracked_balance": 0,
+        "total_count": 0,
+        "top1_share_pct": 0,
+        "top10_share_pct": 0,
+        "fetched_at": None,
+    }
+
+
 @router.get("/burn-breakdown")
 async def burn_breakdown(cache: TTLCache = Depends(get_cache)):
     """오늘의 소각 분해 — Fees / Traffic Purchases."""
