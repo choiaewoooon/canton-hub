@@ -40,13 +40,17 @@ function MarketRow({
   totalVol,
   accentColor,
   showRank,
+  lang,
 }: {
   entry: MarketEntry;
   totalVol: number;
   accentColor: string;
   showRank: boolean;
+  lang: string;
 }) {
   const sharePct = totalVol > 0 ? (entry.volume_24h_usd / totalVol) * 100 : 0;
+  const hasDepth = entry.depth_plus_2pct > 0 || entry.depth_minus_2pct > 0;
+
   return (
     <a
       href={entry.trade_url || "#"}
@@ -75,6 +79,31 @@ function MarketRow({
           {entry.pair} · {fmtUsd(entry.price)} · spread {entry.spread_pct.toFixed(2)}%
         </div>
       </div>
+
+      {/* +2% / -2% Depth (order book liquidity) */}
+      {hasDepth && (
+        <div className="hidden lg:flex flex-col items-end shrink-0 w-[110px] text-[10px] leading-tight">
+          <div className="text-[9px] text-zinc-600 uppercase tracking-wider">
+            {lang === "ko" ? "호가창 2%" : "2% Depth"}
+          </div>
+          <div className="flex gap-1.5 mt-0.5">
+            <span
+              className="text-canton-up font-semibold"
+              title={lang === "ko" ? "매수호가 +2% 범위 유동성" : "Bid side +2% liquidity"}
+            >
+              +{fmtLargeUsd(entry.depth_plus_2pct)}
+            </span>
+            <span className="text-zinc-700">·</span>
+            <span
+              className="text-canton-down font-semibold"
+              title={lang === "ko" ? "매도호가 -2% 범위 유동성" : "Ask side -2% liquidity"}
+            >
+              −{fmtLargeUsd(entry.depth_minus_2pct)}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Volume bar */}
       <div className="w-20 hidden md:block shrink-0">
         <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -299,6 +328,7 @@ export default function ExchangesSection({ lang }: Props) {
               totalVol={activeTotal}
               accentColor={activeColor}
               showRank
+              lang={lang}
             />
           ))}
         </div>

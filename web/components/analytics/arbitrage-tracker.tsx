@@ -23,6 +23,38 @@ function formatPrice(p: number): string {
   return `$${p.toFixed(5)}`;
 }
 
+// Map source name → direct trade URL for each venue in the live tracker.
+// These match the sources registered in collectors/realtime_prices.py.
+function getTradeUrl(source: string): string {
+  switch (source) {
+    // DEX Perp
+    case "Hyperliquid":
+      return "https://app.hyperliquid.xyz/trade/CC";
+    case "Extended":
+      return "https://app.extended.exchange/trade/CC-USD";
+    case "Aster":
+      return "https://www.asterdex.com/en/futures/CCUSDT";
+    case "Lighter":
+      return "https://app.lighter.xyz/trade/CC";
+    // CEX Spot
+    case "Bybit":
+      return "https://www.bybit.com/trade/spot/CC/USDT";
+    case "OKX":
+      return "https://www.okx.com/trade-spot/cc-usdt";
+    case "Kraken":
+      return "https://pro.kraken.com/app/trade/CC-USD";
+    // CEX Perp
+    case "Bybit Perp":
+      return "https://www.bybit.com/trade/usdt/CCUSDT";
+    case "OKX Perp":
+      return "https://www.okx.com/trade-swap/cc-usdt-swap";
+    case "Binance Perp":
+      return "https://www.binance.com/en/futures/CCUSDT";
+    default:
+      return "#";
+  }
+}
+
 function PriceCard({
   entry,
   isHighest,
@@ -59,9 +91,24 @@ function PriceCard({
 
   const venueLabel = VENUE_LABELS[entry.venue_type] || { ko: entry.venue_type, en: entry.venue_type };
   const marketLabel = MARKET_LABELS[entry.market] || { ko: entry.market, en: entry.market };
+  const tradeUrl = getTradeUrl(entry.source);
+  const hasLink = tradeUrl !== "#";
+
+  const hoverRing = isHighest
+    ? "hover:border-canton-up"
+    : isLowest
+      ? "hover:border-canton-down"
+      : "hover:border-zinc-600";
 
   return (
-    <div className={`relative ${accentBg} border ${borderColor} rounded-md p-3 transition`}>
+    <a
+      href={tradeUrl}
+      target={hasLink ? "_blank" : undefined}
+      rel={hasLink ? "noopener noreferrer" : undefined}
+      className={`relative block ${accentBg} border ${borderColor} rounded-md p-3 transition ${hoverRing} ${
+        hasLink ? "cursor-pointer" : "cursor-default"
+      }`}
+    >
       {/* Highest/Lowest badge */}
       {(isHighest || isLowest) && (
         <div
@@ -80,7 +127,10 @@ function PriceCard({
       )}
 
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[12px] font-semibold text-zinc-100 truncate">{entry.source}</span>
+        <span className="text-[12px] font-semibold text-zinc-100 truncate flex items-center gap-1">
+          {entry.source}
+          {hasLink && <span className="text-[9px] text-zinc-600">↗</span>}
+        </span>
         <div className="flex gap-1 shrink-0">
           <span
             className={`text-[8px] font-bold px-1 rounded ${
@@ -119,7 +169,7 @@ function PriceCard({
       </div>
 
       <div className="text-[9px] text-zinc-600 mt-0.5">{entry.pair}</div>
-    </div>
+    </a>
   );
 }
 
