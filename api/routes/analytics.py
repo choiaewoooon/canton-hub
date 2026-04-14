@@ -46,6 +46,18 @@ async def cumulative(
     return cache.get(f"analytics:cumulative:{period}") or _empty(period)
 
 
+@router.get("/consensus")
+async def consensus(cache: TTLCache = Depends(get_cache)):
+    """Canton Consensus 참여자 — 실시간 SV + top validators from CantonScan API."""
+    return cache.get("analytics:consensus") or {
+        "super_validators": [],
+        "top_validators": [],
+        "total_sv_count": 0,
+        "total_validator_count": 0,
+        "fetched_at": None,
+    }
+
+
 @router.get("/holders")
 async def holders(cache: TTLCache = Depends(get_cache)):
     """Major CC Holders — CantonScan 온체인 balance 기반 top holders."""

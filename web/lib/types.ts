@@ -171,6 +171,44 @@ export interface ExchangesData {
   fetched_at: string | null;
 }
 
+export interface ConsensusSV {
+  party_id: string;
+  name: string;
+  organization: string;
+  domain: string | null;
+  status: string;
+  weight: number;
+  rewards_total: number;
+  rewards_change_24h: number;
+  uptime_pct: number;
+  active_rounds: number;
+  total_rounds: number;
+  rounds_missed: number;
+  last_active_at: string | null;
+  amulet_price_vote: number | null;
+  balance: number;
+}
+
+export interface ConsensusValidator {
+  party_id: string;
+  organization: string;
+  domain: string | null;
+  sponsor: string;
+  rewards_total: number;
+  rewards_change_24h: number;
+  rounds_missed: number;
+  last_active_at: string | null;
+  balance: number;
+}
+
+export interface ConsensusData {
+  super_validators: ConsensusSV[];
+  top_validators: ConsensusValidator[];
+  total_sv_count: number;
+  total_validator_count: number;
+  fetched_at: string | null;
+}
+
 export interface Holder {
   party_id: string;
   organization: string;

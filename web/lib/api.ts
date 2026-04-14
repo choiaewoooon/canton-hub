@@ -13,6 +13,7 @@ import type {
   ExchangesData,
   RealtimePrices,
   HoldersData,
+  ConsensusData,
 } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -83,5 +84,11 @@ export function useRealtimePrices() {
 export function useHolders() {
   return useSWR<HoldersData>(`${API}/api/analytics/holders`, fetcher, {
     refreshInterval: 3_600_000, // 1h
+  });
+}
+
+export function useConsensus() {
+  return useSWR<ConsensusData>(`${API}/api/analytics/consensus`, fetcher, {
+    refreshInterval: 1_800_000, // 30min
   });
 }

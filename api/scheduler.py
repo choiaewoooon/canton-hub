@@ -476,6 +476,24 @@ def _relative_time(dt) -> str:
     return f"{seconds // 86400}d ago"
 
 
+async def collect_consensus(cache: TTLCache):
+    """Canton Consensus 참여자 수집 — SV + top validators from CantonScan API."""
+    from collectors.consensus_collector import collect_consensus as _collect, load_cached_consensus
+    try:
+        data = await _collect()
+        if data and data.get("super_validators"):
+            cache.set("analytics:consensus", data, ttl=1900)  # 30min + buffer
+            sv_count = len(data["super_validators"])
+            val_count = len(data["top_validators"])
+            logger.info(f"Consensus cached: {sv_count} SVs, {val_count} top validators")
+    except Exception as e:
+        logger.error(f"Consensus collection failed: {e}")
+        cached = load_cached_consensus()
+        if cached:
+            cache.set("analytics:consensus", cached, ttl=1900)
+            logger.info("Consensus loaded from file cache")
+
+
 async def collect_holders(cache: TTLCache):
     """Major CC Holders 수집 — CantonScan API의 validator/SV/app party balance 병렬 조회."""
     from collectors.holders_collector import collect_major_holders, load_cached_holders
@@ -555,7 +573,7 @@ async def _loop(fn, cache: TTLCache, interval: int, name: str):
 
 async def _deferred_initial(cache: TTLCache):
     """느린 collector들을 백그라운드에서 수집."""
-    logger.info("Running deferred collection (charts, feed, governance, homepage, exchanges, holders)...")
+    logger.info("Running deferred collection (charts, feed, governance, homepage, exchanges, holders, consensus)...")
     await asyncio.gather(
         collect_charts(cache),
         collect_feed(cache),
@@ -563,6 +581,7 @@ async def _deferred_initial(cache: TTLCache):
         collect_homepage(cache),
         collect_exchanges(cache),
         collect_holders(cache),
+        collect_consensus(cache),
         return_exceptions=True,
     )
     logger.info("Deferred collection complete")
@@ -587,6 +606,7 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_exchanges, cache, 900, "exchanges"))  # 15분
     asyncio.create_task(_loop(collect_realtime_prices, cache, 5, "realtime-prices"))  # 5초
     asyncio.create_task(_loop(collect_holders, cache, 3600, "holders"))  # 1시간
+    asyncio.create_task(_loop(collect_consensus, cache, 1800, "consensus"))  # 30분
 
     # 즉시 1회 실행 — 첫 페이지 로드 시 빈 데이터 방지
     asyncio.create_task(collect_realtime_prices(cache))

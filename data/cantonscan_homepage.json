@@ -1,7 +1,6 @@
 {
-  "active_addresses_24h": 106972,
-  "active_addresses_change": 10.58,
-  "private_tx_count": 854007,
-  "private_tx_ratio": 43.5,
-  "total_transfers_24h": 1687478
+  "active_addresses_change": -6.94,
+  "private_tx_count": 854941,
+  "private_tx_ratio": 43.6,
+  "total_transfers_24h": 1690608
 }
