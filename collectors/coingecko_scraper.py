@@ -34,6 +34,103 @@ def _parse_pct(s: str) -> float:
         return 0.0
 
 
+def _strip_affiliate(url: str) -> str:
+    """CoinGecko가 어필리에이트 ID를 붙여서 줄 때 제거 (?affiliate_id=, &ref=, etc.)"""
+    if not url:
+        return url
+    from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+    try:
+        parsed = urlparse(url)
+        query = parse_qsl(parsed.query)
+        affiliate_keys = {
+            "affiliate_id", "ref", "referral", "refcode", "ref_id",
+            "invitecode", "inviter", "from", "utm_source", "utm_medium",
+            "utm_campaign", "utm_content", "utm_term",
+            "channelid", "sharecode", "rcode", "ru", "inviter_id",
+            "invite_code", "source", "aff", "affcode",
+        }
+        clean_query = [(k, v) for k, v in query if k.lower() not in affiliate_keys]
+        return urlunparse(parsed._replace(query=urlencode(clean_query)))
+    except Exception:
+        return url
+
+
+# ============================================================
+# Derivatives URL Mapping
+# ============================================================
+# CoinGecko's derivatives pages don't include external trade links,
+# only internal CoinGecko exchange page links. So we build the trade
+# URLs ourselves based on the exchange name.
+#
+# Key: exchange name as it appears on CoinGecko (lowercase comparison)
+# Value: URL template using {base} (e.g. "CC") and {quote} (e.g. "USDT")
+DERIV_URL_TEMPLATES: dict[str, str] = {
+    # === CEX perp ===
+    "binance (futures)": "https://www.binance.com/en/futures/{base}{quote}",
+    "bybit (futures)": "https://www.bybit.com/trade/usdt/{base}{quote}",
+    "okx (futures)": "https://www.okx.com/trade-swap/{base_l}-{quote_l}-swap",
+    "bingx (futures)": "https://bingx.com/en/futures/{base}{quote}",
+    "xt.com (derivatives)": "https://www.xt.com/en/futures/trade/{base_l}_{quote_l}",
+    "lbank (futures)": "https://www.lbank.com/futures/{base_l}_{quote_l}",
+    "coinw (futures)": "https://www.coinw.com/futures/{base}_{quote}",
+    "toobit futures": "https://www.toobit.com/en-US/futures/trade/{base}{quote}",
+    "orangex futures": "https://www.orangex.com/futures/{base}{quote}",
+    "bydfi (futures)": "https://www.bydfi.com/en/futures/{base_l}_{quote_l}",
+    "mexc (futures)": "https://futures.mexc.com/exchange/{base}_{quote}",
+    "flipster": "https://flipster.io/en/futures/{base}_{quote}",
+    "ourbit (futures)": "https://www.ourbit.com/futures/{base}_{quote}",
+    "phemex (perpetual)": "https://phemex.com/trade/{base}{quote}",
+    "phemex (futures)": "https://phemex.com/futures/trade/{base}{quote}",
+    "bitunix futures": "https://www.bitunix.com/contract-trade/{base}{quote}",
+    "weex (futures)": "https://www.weex.com/futures/{base}{quote}",
+    "bitrue (futures)": "https://www.bitrue.com/futures/{base}{quote}",
+    "kcex (futures)": "https://www.kcex.com/futures/exchange/{base}_{quote}",
+    "backpack (futures)": "https://backpack.exchange/trade/{base}_{quote}_PERP",
+    "bitkan (futures)": "https://bitkan.com/en/futures/{base}{quote}",
+    "bitmart futures": "https://futures.bitmart.com/en?symbol={base}_{quote}",
+    "blofin (futures)": "https://blofin.com/futures/{base}-{quote}",
+    "variational omni": "https://app.variational.io/perp/{base}-{quote}",
+    "gate (futures)": "https://www.gate.com/futures_trade/USDT/{base}_{quote}",
+    "kucoin futures": "https://www.kucoin.com/futures/trade/{base}{quote}M",
+    "kraken (futures)": "https://futures.kraken.com/trade/futures/pi_{base_l}usd",
+    # === DEX perp ===
+    "hyperliquid (futures)": "https://app.hyperliquid.xyz/trade/{base}",
+    "extended": "https://app.extended.exchange/trade/{base}-{quote}",
+    "lighter": "https://app.lighter.xyz/trade/{base}",
+    "aster (futures)": "https://www.asterdex.com/en/futures/{base}{quote}",
+    "grvt": "https://app.grvt.io/trade/{base}_{quote}",
+    "apex (futures)": "https://pro.apex.exchange/trade/{base}{quote}",
+    "dydx (v4) (perpetual)": "https://dydx.trade/trade/{base}-{quote}",
+    "paradex (perpetual)": "https://app.paradex.trade/trade/{base}-{quote}",
+    "vertex (perpetual)": "https://app.vertexprotocol.com/trade/{base}-{quote}",
+    "drift protocol (perpetual)": "https://app.drift.trade/{base}",
+}
+
+
+def _derive_trade_url(exchange_name: str, pair: str) -> str | None:
+    """Derive a direct exchange trade URL from exchange name + pair."""
+    if not exchange_name or not pair:
+        return None
+    key = exchange_name.lower().strip()
+    template = DERIV_URL_TEMPLATES.get(key)
+    if not template:
+        return None
+    # Parse pair "CC/USDT" → base=CC, quote=USDT
+    parts = pair.split("/")
+    if len(parts) != 2:
+        return None
+    base, quote = parts[0].strip().upper(), parts[1].strip().upper()
+    try:
+        return template.format(
+            base=base,
+            quote=quote,
+            base_l=base.lower(),
+            quote_l=quote.lower(),
+        )
+    except (KeyError, IndexError):
+        return None
+
+
 async def scrape_coingecko_markets() -> dict:
     """CoinGecko의 Canton markets 페이지에서 spot + perpetuals + futures 데이터 수집."""
     from playwright.async_api import async_playwright
@@ -107,9 +204,15 @@ async def _scrape_market_type(browser, market_type: str) -> list[dict]:
                         // Try to find logo image
                         const img = row.querySelector('img');
                         const logo = img ? img.src : '';
-                        // Try to find link
-                        const link = row.querySelector('a[href]');
-                        const href = link ? link.href : '';
+                        // Find the trade URL — prefer external links (target=_blank)
+                        // which point to the actual exchange's trading pair page,
+                        // not CoinGecko's internal exchange overview page.
+                        const links = Array.from(row.querySelectorAll('a[href]'));
+                        const externalLink = links.find(a =>
+                            a.target === '_blank' &&
+                            !a.href.includes('coingecko.com')
+                        );
+                        const href = externalLink ? externalLink.href : (links[0] ? links[0].href : '');
                         return { cells, logo, href };
                     });
                 }
@@ -148,6 +251,16 @@ async def _scrape_market_type(browser, market_type: str) -> list[dict]:
                 volume = _parse_usd(cells[8]) if len(cells) > 8 else 0
                 volume_pct = _parse_pct(cells[9]) if len(cells) > 9 else 0
 
+                # Trade URL: prefer scraped external link, fall back to derived URL.
+                # Derivatives pages only expose CoinGecko internal links,
+                # so we derive the URL from a hardcoded template.
+                raw_url = row.get("href", "")
+                if not raw_url or "coingecko.com" in raw_url:
+                    derived = _derive_trade_url(exch_text, pair)
+                    trade_url = derived or raw_url
+                else:
+                    trade_url = _strip_affiliate(raw_url)
+
                 items.append({
                     "rank": rank,
                     "exchange": exch_text,
@@ -160,7 +273,7 @@ async def _scrape_market_type(browser, market_type: str) -> list[dict]:
                     "volume_24h_usd": volume,
                     "volume_pct": volume_pct,
                     "logo": row.get("logo", ""),
-                    "trade_url": row.get("href", ""),
+                    "trade_url": trade_url,
                 })
 
             # Stop early if fewer than 10 rows on this page (last page reached)
