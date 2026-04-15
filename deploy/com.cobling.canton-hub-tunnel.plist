@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Canton Hub Cloudflare Tunnel LaunchAgent
+
+  scripts/run-tunnel.sh 래퍼를 실행한다. 래퍼는:
+    1. cloudflared Quick Tunnel을 띄우고
+    2. 랜덤 URL을 감지해서
+    3. 이전 실행의 URL과 다르면 scripts/update-vercel-env.sh로 Vercel prod 재배포 트리거
+    4. cloudflared가 죽으면 스크립트도 종료 → KeepAlive가 재시작
+
+  설치:
+    cp deploy/com.cobling.canton-hub-tunnel.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.cobling.canton-hub-tunnel.plist
+
+  로그:
+    /tmp/canton-hub-tunnel.log             — cloudflared 자체 로그
+    /tmp/canton-hub-tunnel-wrapper.log     — 래퍼 스크립트 로그
+    /tmp/canton-hub-tunnel-url.txt         — 마지막으로 활성화된 tunnel URL
+    /tmp/canton-hub-vercel-redeploy.log    — Vercel 재배포 로그
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cobling.canton-hub-tunnel</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/choejaewon/project/Ozzycanton/canton-hub/scripts/run-tunnel.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/choejaewon/project/Ozzycanton/canton-hub</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- vercel CLI, cloudflared 등 전부 절대경로로 부르지만 HOME은 필요 -->
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/choejaewon</string>
+    </dict>
+
+    <!-- 부팅 시 자동 실행 -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- 크래시 / 정상 종료 모두 재시작 (tunnel은 계속 살아있어야 함) -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- 재시작 간 15초 쿨다운 — Vercel 재배포가 1-2분 걸려도 그 안에 다시 안 돌게 -->
+    <key>ThrottleInterval</key>
+    <integer>15</integer>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/canton-hub-tunnel-launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/canton-hub-tunnel-launchd.err.log</string>
+</dict>
+</plist>
