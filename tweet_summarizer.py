@@ -1,25 +1,41 @@
 """
-트윗 요약 모듈
-Claude Code headless를 사용하여 수집된 트윗을 깔끔하게 요약합니다.
+트윗 요약 모듈 (canton-hub backend 버전)
+
+Anthropic Messages API를 직접 호출(httpx)해서 한국어로 요약한다. canton-bot의
+원본 버전은 `claude` CLI를 subprocess로 부르는 macOS 전용이라 Linux Fly.io
+환경에서는 동작하지 않아서 cloud-native로 다시 작성했다.
+
+동작:
+  - ANTHROPIC_API_KEY 환경변수가 있으면 → Anthropic Messages API 호출
+  - 없거나 호출 실패 → _fallback_format (트윗 원문 bullet)
 """
-import asyncio
+import json
 import logging
+import os
+from typing import Any
+
+import httpx
 
 from collectors import TweetData
 
 logger = logging.getLogger(__name__)
 
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_VERSION = "2023-06-01"
+# Sonnet 4.6 — 한국어 톤 정확도 좋고 ~월 $0.5 수준 비용. Haiku 4.5로 더 절약 가능.
+MODEL = "claude-sonnet-4-6"
+MAX_TOKENS = 1024
+TIMEOUT_SECONDS = 30.0
+
 
 async def summarize_tweets(tweets: dict[str, list[TweetData]]) -> str:
-    """수집된 트윗들을 AI로 요약 + 원문 링크 포함하여 반환 (HTML)"""
-
+    """수집된 트윗들을 AI로 요약. HTML 태그 포함 (formatter에서 strip)."""
     total = sum(len(tw_list) for tw_list in tweets.values())
     if total == 0:
         return ""
 
-    # 트윗 원문을 프롬프트용 텍스트로 변환
-    raw_lines = []
     all_tweets: list[TweetData] = []
+    raw_lines = []
     for account, tw_list in tweets.items():
         for tw in sorted(tw_list, key=lambda t: t.created_at, reverse=True):
             all_tweets.append(tw)
@@ -28,14 +44,11 @@ async def summarize_tweets(tweets: dict[str, list[TweetData]]) -> str:
                 f"{tw.text} "
                 f"[likes:{tw.likes} RT:{tw.retweets} views:{tw.views}]"
             )
-
     raw_text = "\n".join(raw_lines)
 
-    # 트윗 URL 매핑 (프롬프트에 포함시켜 AI가 링크를 달 수 있게)
     tweet_refs = []
     for i, tw in enumerate(all_tweets):
         tweet_refs.append(f"[{i+1}] @{tw.username}: {tw.text[:100]} → {tw.url}")
-
     ref_text = "\n".join(tweet_refs)
 
     prompt = f"""아래는 Canton Network 트위터 계정들의 최근 24시간 트윗이다.
@@ -63,34 +76,54 @@ async def summarize_tweets(tweets: dict[str, list[TweetData]]) -> str:
 URL 참조:
 {ref_text}"""
 
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        logger.warning("ANTHROPIC_API_KEY 미설정 — fallback 포맷으로 대체")
+        return _fallback_format(all_tweets)
+
     try:
-        process = await asyncio.create_subprocess_exec(
-            "/opt/homebrew/bin/claude", "-p", prompt,
-            "--output-format", "text",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            logger.error(f"Claude 호출 실패: {stderr.decode()}")
-            summary = _fallback_format(all_tweets)
-        else:
-            summary = stdout.decode().strip()
-            logger.info(f"트윗 요약 완료 ({len(summary)} chars)")
-
-    except FileNotFoundError:
-        logger.warning("claude CLI를 찾을 수 없습니다. 기본 포맷으로 대체합니다.")
-        summary = _fallback_format(all_tweets)
+        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
+            r = await client.post(
+                ANTHROPIC_API_URL,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": ANTHROPIC_VERSION,
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": MODEL,
+                    "max_tokens": MAX_TOKENS,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            r.raise_for_status()
+            payload: dict[str, Any] = r.json()
+            content_blocks = payload.get("content", [])
+            if not content_blocks:
+                logger.error(f"Anthropic 응답에 content 없음: {payload}")
+                return _fallback_format(all_tweets)
+            summary = "".join(
+                block.get("text", "") for block in content_blocks if block.get("type") == "text"
+            ).strip()
+            if not summary:
+                logger.error("Anthropic 응답 텍스트가 비어있음")
+                return _fallback_format(all_tweets)
+            usage = payload.get("usage", {})
+            logger.info(
+                f"트윗 요약 완료 ({len(summary)} chars · "
+                f"in={usage.get('input_tokens', 0)} out={usage.get('output_tokens', 0)})"
+            )
+            return summary
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Anthropic API HTTP {e.response.status_code}: {e.response.text[:200]}")
+        return _fallback_format(all_tweets)
     except Exception as e:
         logger.error(f"트윗 요약 실패: {e}")
-        summary = _fallback_format(all_tweets)
-
-    return summary
+        return _fallback_format(all_tweets)
 
 
 def _fallback_format(all_tweets: list[TweetData]) -> str:
-    """Claude 실패 시 기본 포맷"""
+    """API 키가 없거나 호출 실패 시 기본 포맷 — 트윗 원문 5개 bullet."""
     lines = []
     for tw in all_tweets[:5]:
         text = tw.text.replace("<", "&lt;").replace(">", "&gt;")

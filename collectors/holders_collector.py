@@ -18,7 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-import httpx
+# See kr_companies_collector.py for why we use curl_cffi instead of httpx.
+from curl_cffi.requests import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ def _extract_org_name(party_id: str) -> str:
     return name.strip()
 
 
-async def _fetch_party_balance(client: httpx.AsyncClient, party_id: str) -> tuple[str, float, float] | None:
+async def _fetch_party_balance(client: AsyncSession, party_id: str) -> tuple[str, float, float] | None:
     """단일 party의 balance 조회. (party_id, avail, locked) 반환 or None."""
     try:
         enc = quote(party_id, safe="")
@@ -69,7 +70,7 @@ async def _fetch_party_balance(client: httpx.AsyncClient, party_id: str) -> tupl
         return None
 
 
-async def _fetch_seed_parties(client: httpx.AsyncClient) -> list[tuple[str, str]]:
+async def _fetch_seed_parties(client: AsyncSession) -> list[tuple[str, str]]:
     """Seed list 수집: (party_id, category) 튜플 목록."""
     seeds: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -114,11 +115,21 @@ async def _fetch_seed_parties(client: httpx.AsyncClient) -> list[tuple[str, str]
     return seeds[:MAX_PARTIES]
 
 
+# Base headers — curl_cffi impersonate="chrome124" handles UA + sec-* headers;
+# explicit Origin/Referer reinforce browser signal.
+_CANTONSCAN_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+    "Referer": "https://www.cantonscan.com/",
+    "Origin": "https://www.cantonscan.com",
+}
+
+
 async def collect_major_holders() -> list[Holder]:
     """
     모든 seed party의 balance를 조회하고 정렬된 holder 리스트 반환.
     """
-    async with httpx.AsyncClient() as client:
+    async with AsyncSession(impersonate="chrome124", headers=_CANTONSCAN_HEADERS) as client:
         logger.info("Fetching seed party list (SV + validators + apps)...")
         seeds = await _fetch_seed_parties(client)
         logger.info(f"Got {len(seeds)} seed parties, fetching balances...")

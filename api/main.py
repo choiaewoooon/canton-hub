@@ -1,4 +1,5 @@
 """Canton Hub API — FastAPI application."""
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +17,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Canton Hub API", lifespan=lifespan)
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# CORS — tighten in production via ALLOWED_ORIGINS env var
+# Dev: unset → allow all (localhost friendly)
+# Prod: set to comma-separated list e.g. "https://canton-hub.vercel.app,https://canton.example.com"
+_allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
+if _allowed_origins_env:
+    _allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+else:
+    _allowed_origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 app.include_router(price.router)
 app.include_router(network.router)

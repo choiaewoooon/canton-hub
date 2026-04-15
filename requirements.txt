@@ -1,12 +1,22 @@
-# Canton Telegram Bot - Dependencies
-python-telegram-bot>=21.0
-httpx>=0.25
-beautifulsoup4>=4.12
-python-dotenv>=1.0
-APScheduler>=3.10
-playwright>=1.40
-Jinja2>=3.1
-matplotlib>=3.8
+# Canton Hub — Web backend dependencies
+# This is the FastAPI + scheduler + collectors service. Deploys to Fly.io.
+# Telegram bot dependencies (python-telegram-bot, matplotlib, Jinja2) are in
+# the separate canton-telegram-bot/ repo and NOT needed here.
+
+# Web framework
 fastapi>=0.115
 uvicorn[standard]>=0.30
 sse-starlette>=2.0
+
+# HTTP + scraping + scheduling
+httpx>=0.25
+# curl_cffi impersonates Chrome's TLS/JA3 fingerprint — required to bypass
+# Cloudflare's datacenter-IP block on fossil-outlook-levitate-gloomy.cantonscan.com.
+# Used by cantonscan_collector, holders_collector, kr_companies_collector.
+curl_cffi>=0.7
+beautifulsoup4>=4.12
+playwright>=1.40
+APScheduler>=3.10
+
+# Config
+python-dotenv>=1.0

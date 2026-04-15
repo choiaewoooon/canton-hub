@@ -6,7 +6,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-import httpx
+# curl_cffi impersonates Chrome's TLS/JA3 fingerprint. Cloudflare in front of
+# fossil-outlook-levitate-gloomy.cantonscan.com blocks stock python-httpx on
+# datacenter IPs (Fly.io / AWS / GCP). Chrome-impersonating TLS handshake
+# passes the block. See kr_companies_collector.py for more detail.
+from curl_cffi.requests import AsyncSession
 
 import config
 
@@ -44,13 +48,17 @@ class CantonScanCollector:
     """CantonScan 데이터 수집기"""
 
     def __init__(self):
-        self.client = httpx.AsyncClient(
+        # curl_cffi impersonate="chrome124" handles User-Agent + sec-* headers +
+        # TLS JA3 fingerprint. Explicit Accept/Referer/Origin reinforce browser
+        # signal beyond TLS-level identity.
+        self.client = AsyncSession(
+            impersonate="chrome124",
             timeout=30,
             headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+                "Referer": "https://www.cantonscan.com/",
+                "Origin": "https://www.cantonscan.com",
             },
         )
 
@@ -105,4 +113,4 @@ class CantonScanCollector:
         )
 
     async def close(self):
-        await self.client.aclose()
+        await self.client.close()

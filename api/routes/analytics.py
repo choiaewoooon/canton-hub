@@ -46,14 +46,13 @@ async def cumulative(
     return cache.get(f"analytics:cumulative:{period}") or _empty(period)
 
 
-@router.get("/consensus")
-async def consensus(cache: TTLCache = Depends(get_cache)):
-    """Canton Consensus 참여자 — 실시간 SV + top validators from CantonScan API."""
-    return cache.get("analytics:consensus") or {
-        "super_validators": [],
-        "top_validators": [],
-        "total_sv_count": 0,
-        "total_validator_count": 0,
+@router.get("/kr-companies")
+async def kr_companies(cache: TTLCache = Depends(get_cache)):
+    """한국 기업 Canton 참여 현황 — Upbit/Dunamu, Coinone, Marblex."""
+    return cache.get("analytics:kr-companies") or {
+        "companies": [],
+        "grand_total_balance": 0,
+        "total_wallet_count": 0,
         "fetched_at": None,
     }
 

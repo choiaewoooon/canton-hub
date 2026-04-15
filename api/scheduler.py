@@ -288,9 +288,20 @@ async def collect_charts(cache: TTLCache):
         except Exception as e:
             logger.warning(f"Failed to save chart cache file: {e}")
 
-    # Burn + B/M chart — hour interval for 24h, day for others
+    # Burn + B/M chart — hour interval for 24h, day for others.
+    # Uses curl_cffi to impersonate Chrome TLS fingerprint so Cloudflare on
+    # fossil-outlook-levitate-gloomy.cantonscan.com doesn't 403 datacenter IPs.
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        from curl_cffi.requests import AsyncSession
+        async with AsyncSession(
+            impersonate="chrome124",
+            timeout=30,
+            headers={
+                "Accept": "application/json, text/plain, */*",
+                "Referer": "https://www.cantonscan.com/",
+                "Origin": "https://www.cantonscan.com",
+            },
+        ) as client:
             # Hour interval (24h 기간용)
             hour_resp = await client.get(f"{CANTONSCAN_API_BASE}/api/mining-rounds/timeseries?interval=hour")
             hour_resp.raise_for_status()
@@ -476,22 +487,24 @@ def _relative_time(dt) -> str:
     return f"{seconds // 86400}d ago"
 
 
-async def collect_consensus(cache: TTLCache):
-    """Canton Consensus 참여자 수집 — SV + top validators from CantonScan API."""
-    from collectors.consensus_collector import collect_consensus as _collect, load_cached_consensus
+async def collect_kr_companies(cache: TTLCache):
+    """한국 기업 Canton 참여 현황 — 3개 기업의 모든 지갑 balance 수집."""
+    from collectors.kr_companies_collector import collect_kr_companies as _collect, load_cached_kr_companies
     try:
         data = await _collect()
-        if data and data.get("super_validators"):
-            cache.set("analytics:consensus", data, ttl=1900)  # 30min + buffer
-            sv_count = len(data["super_validators"])
-            val_count = len(data["top_validators"])
-            logger.info(f"Consensus cached: {sv_count} SVs, {val_count} top validators")
+        if data and data.get("companies"):
+            cache.set("analytics:kr-companies", data, ttl=1900)
+            logger.info(
+                f"KR companies cached: {len(data['companies'])} companies, "
+                f"{data['total_wallet_count']} wallets, "
+                f"{data['grand_total_balance']:,.0f} CC"
+            )
     except Exception as e:
-        logger.error(f"Consensus collection failed: {e}")
-        cached = load_cached_consensus()
+        logger.error(f"KR companies collection failed: {e}")
+        cached = load_cached_kr_companies()
         if cached:
-            cache.set("analytics:consensus", cached, ttl=1900)
-            logger.info("Consensus loaded from file cache")
+            cache.set("analytics:kr-companies", cached, ttl=1900)
+            logger.info("KR companies loaded from file cache")
 
 
 async def collect_holders(cache: TTLCache):
@@ -581,7 +594,7 @@ async def _deferred_initial(cache: TTLCache):
         collect_homepage(cache),
         collect_exchanges(cache),
         collect_holders(cache),
-        collect_consensus(cache),
+        collect_kr_companies(cache),
         return_exceptions=True,
     )
     logger.info("Deferred collection complete")
@@ -606,7 +619,7 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_exchanges, cache, 900, "exchanges"))  # 15분
     asyncio.create_task(_loop(collect_realtime_prices, cache, 5, "realtime-prices"))  # 5초
     asyncio.create_task(_loop(collect_holders, cache, 3600, "holders"))  # 1시간
-    asyncio.create_task(_loop(collect_consensus, cache, 1800, "consensus"))  # 30분
+    asyncio.create_task(_loop(collect_kr_companies, cache, 1800, "kr-companies"))  # 30분
 
     # 즉시 1회 실행 — 첫 페이지 로드 시 빈 데이터 방지
     asyncio.create_task(collect_realtime_prices(cache))
