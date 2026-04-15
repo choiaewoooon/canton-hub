@@ -11,3 +11,11 @@ test_card_up.png
 launchd_stdout.log
 launchd_stderr.log
 docs/superpowers/
+
+# Generated artifacts
+*.bak
+.gstack/
+.superpowers/
+
+# File cache (backed by Fly.io canton_data volume mount, not needed in git)
+data/*.json
