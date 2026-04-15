@@ -13,6 +13,41 @@ const STATUS_STYLE: Record<string, string> = {
   Draft: "text-yellow-400 bg-yellow-400/10 border-yellow-400/20",
 };
 
+const TITLE: Record<string, string> = {
+  ko: "거버넌스 캘린더",
+  en: "Governance Calendar",
+  ja: "ガバナンスカレンダー",
+  zh: "治理日历",
+};
+
+const SUBTITLE: Record<string, string> = {
+  ko: "Canton Improvement Proposals (CIP) 진행 현황",
+  en: "Canton Improvement Proposals (CIP) status tracker",
+  ja: "Canton Improvement Proposals (CIP) 進捗状況",
+  zh: "Canton Improvement Proposals (CIP) 进度追踪",
+};
+
+const VOTING_LABEL: Record<string, string> = {
+  ko: "투표 진행 중",
+  en: "Voting in Progress",
+  ja: "投票進行中",
+  zh: "投票进行中",
+};
+
+const RECENT_LABEL: Record<string, string> = {
+  ko: "최근 통과",
+  en: "Recently Approved",
+  ja: "最近承認",
+  zh: "最近通过",
+};
+
+const LOADING_LABEL: Record<string, string> = {
+  ko: "거버넌스 데이터를 불러오는 중...",
+  en: "Loading governance data...",
+  ja: "ガバナンスデータを読み込み中...",
+  zh: "正在加载治理数据...",
+};
+
 export default function GovernanceCalendar({ lang }: Props) {
   const { data } = useGovernance();
   const cips = data?.recent_cips || [];
@@ -22,24 +57,24 @@ export default function GovernanceCalendar({ lang }: Props) {
   // Recently approved
   const recent = cips.filter((c) => c.status === "Approved" || c.status === "Final");
 
-  const title = lang === "ko" ? "거버넌스 캘린더" : "Governance Calendar";
+  const title = TITLE[lang] || TITLE.en;
+  const subtitle = SUBTITLE[lang] || SUBTITLE.en;
+  const votingLabel = VOTING_LABEL[lang] || VOTING_LABEL.en;
+  const recentLabel = RECENT_LABEL[lang] || RECENT_LABEL.en;
+  const loadingLabel = LOADING_LABEL[lang] || LOADING_LABEL.en;
 
   return (
     <div className="bg-canton-card border border-canton-border rounded-[10px] p-5">
       <div className="mb-4">
         <h3 className="text-[14px] font-semibold text-zinc-100">{title}</h3>
-        <p className="text-[11px] text-zinc-500 mt-0.5">
-          {lang === "ko"
-            ? "Canton Improvement Proposals (CIP) 진행 현황"
-            : "Canton Improvement Proposals (CIP) status tracker"}
-        </p>
+        <p className="text-[11px] text-zinc-500 mt-0.5">{subtitle}</p>
       </div>
 
       {/* 활성 제안 */}
       {active.length > 0 && (
         <div className="mb-4">
           <div className="text-[10px] text-yellow-400/70 uppercase tracking-wider mb-2">
-            ⏳ {lang === "ko" ? "투표 진행 중" : "Voting in Progress"} ({active.length})
+            ⏳ {votingLabel} ({active.length})
           </div>
           <div className="space-y-2">
             {active.map((cip, i) => (
@@ -76,7 +111,7 @@ export default function GovernanceCalendar({ lang }: Props) {
       {recent.length > 0 && (
         <div>
           <div className="text-[10px] text-canton-up/70 uppercase tracking-wider mb-2">
-            ✅ {lang === "ko" ? "최근 통과" : "Recently Approved"} ({recent.length})
+            ✅ {recentLabel} ({recent.length})
           </div>
           <div className="space-y-2">
             {recent.map((cip, i) => (
@@ -109,9 +144,7 @@ export default function GovernanceCalendar({ lang }: Props) {
       )}
 
       {cips.length === 0 && (
-        <p className="text-[12px] text-zinc-600 py-3">
-          {lang === "ko" ? "거버넌스 데이터를 불러오는 중..." : "Loading governance data..."}
-        </p>
+        <p className="text-[12px] text-zinc-600 py-3">{loadingLabel}</p>
       )}
     </div>
   );

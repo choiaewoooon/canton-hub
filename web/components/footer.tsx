@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 interface FooterProps {
   lang: string;
 }
@@ -7,12 +9,18 @@ interface FooterProps {
 export default function Footer({ lang }: FooterProps) {
   return (
     <footer className="border-t border-canton-border mt-8">
-      <div className="max-w-[1200px] mx-auto px-6 py-6">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           {/* Brand */}
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 bg-gradient-to-br from-canton-lime to-[#a3c93a] rounded-md flex items-center justify-center text-[11px] font-black text-black">
-              C
+            <div className="w-7 h-7 rounded-md overflow-hidden ring-1 ring-canton-lime/30 shrink-0">
+              <Image
+                src="/logo-badkids.jpg"
+                alt="Canton Hub"
+                width={28}
+                height={28}
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <div className="text-xs font-bold text-zinc-300">Canton Hub</div>

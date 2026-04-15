@@ -10,16 +10,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Values come from CSS variables defined in app/globals.css
+        // (:root = light default, .dark = dark override)
         canton: {
-          lime: "#c8e64a",
-          bg: "#09090b",
-          card: "#0f0f12",
-          border: "#1c1c1f",
-          up: "#4ade80",
-          down: "#f87171",
-          burn: "#fb923c",
-          mint: "#60a5fa",
-          private: "#a78bfa",
+          lime: "var(--canton-lime)",
+          bg: "var(--canton-bg)",
+          card: "var(--canton-card)",
+          border: "var(--canton-border)",
+          up: "var(--canton-up)",
+          down: "var(--canton-down)",
+          burn: "var(--canton-burn)",
+          mint: "var(--canton-mint)",
+          private: "var(--canton-private)",
         },
       },
     },

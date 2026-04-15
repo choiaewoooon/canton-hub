@@ -171,41 +171,39 @@ export interface ExchangesData {
   fetched_at: string | null;
 }
 
-export interface ConsensusSV {
+export interface KrWallet {
+  short_id: string;
   party_id: string;
-  name: string;
-  organization: string;
-  domain: string | null;
-  status: string;
-  weight: number;
-  rewards_total: number;
-  rewards_change_24h: number;
-  uptime_pct: number;
-  active_rounds: number;
-  total_rounds: number;
-  rounds_missed: number;
-  last_active_at: string | null;
-  amulet_price_vote: number | null;
-  balance: number;
+  role: "cold_wallet" | "validator" | "operational" | "test" | "subsidiary" | string;
+  note_ko: string;
+  note_en: string;
+  available_balance: number;
+  locked_balance: number;
+  total_balance: number;
 }
 
-export interface ConsensusValidator {
-  party_id: string;
-  organization: string;
-  domain: string | null;
-  sponsor: string;
-  rewards_total: number;
-  rewards_change_24h: number;
-  rounds_missed: number;
-  last_active_at: string | null;
-  balance: number;
+export interface KrCompany {
+  slug: string;
+  name_ko: string;
+  name_en: string;
+  domain: string;
+  description_ko: string;
+  description_en: string;
+  insight_ko: string;
+  insight_en: string;
+  verification_status: "on_chain_only" | "confirmed" | string;
+  confidence: "high" | "medium" | "low" | string;
+  evidence_ko: string[];
+  evidence_en: string[];
+  total_balance: number;
+  wallet_count: number;
+  wallets: KrWallet[];
 }
 
-export interface ConsensusData {
-  super_validators: ConsensusSV[];
-  top_validators: ConsensusValidator[];
-  total_sv_count: number;
-  total_validator_count: number;
+export interface KrCompaniesData {
+  companies: KrCompany[];
+  grand_total_balance: number;
+  total_wallet_count: number;
   fetched_at: string | null;
 }
 

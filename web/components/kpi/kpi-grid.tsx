@@ -15,7 +15,7 @@ export default function KpiGrid({ data }: KpiGridProps) {
   return (
     <div className="grid grid-cols-4 gap-3 mb-5">
       {/* B/M Ratio — special highlighted card */}
-      <div className="bg-gradient-to-br from-canton-card to-[#151a0a] border border-canton-lime/20 rounded-[10px] p-4">
+      <div className="bg-gradient-to-br from-canton-card to-canton-accent-bg border border-canton-lime/20 rounded-[10px] p-4">
         <div className="text-[11px] text-canton-lime/50 uppercase tracking-wider mb-1.5">B/M Ratio</div>
         <div className="text-[22px] font-bold text-canton-lime">
           {bmRatio !== null && bmRatio !== undefined ? `${bmRatio.toFixed(4)}x` : "N/A"}

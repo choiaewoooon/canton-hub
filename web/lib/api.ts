@@ -13,7 +13,7 @@ import type {
   ExchangesData,
   RealtimePrices,
   HoldersData,
-  ConsensusData,
+  KrCompaniesData,
 } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -87,8 +87,8 @@ export function useHolders() {
   });
 }
 
-export function useConsensus() {
-  return useSWR<ConsensusData>(`${API}/api/analytics/consensus`, fetcher, {
+export function useKrCompanies() {
+  return useSWR<KrCompaniesData>(`${API}/api/analytics/kr-companies`, fetcher, {
     refreshInterval: 1_800_000, // 30min
   });
 }

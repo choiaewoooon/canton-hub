@@ -6,11 +6,42 @@ interface Props {
   lang: string;
 }
 
+const TITLE: Record<string, string> = {
+  ko: "Canton 트위터 아카이브",
+  en: "Canton Twitter Archive",
+  ja: "Canton ツイッターアーカイブ",
+  zh: "Canton 推特档案",
+};
+
+const TRANSLATED_LABEL: Record<string, string> = {
+  ko: "번역",
+  en: "Translated",
+  ja: "翻訳",
+  zh: "翻译",
+};
+
+const BRIEF_LABEL: Record<string, string> = {
+  ko: "오늘의 요약",
+  en: "Today's Brief",
+  ja: "本日の要約",
+  zh: "今日摘要",
+};
+
+const LOADING_LABEL: Record<string, string> = {
+  ko: "트윗을 불러오는 중...",
+  en: "Loading tweets...",
+  ja: "ツイートを読み込み中...",
+  zh: "正在加载推文...",
+};
+
 export default function TwitterArchive({ lang }: Props) {
   const { data } = useFeed(lang);
   const items = data?.items || [];
 
-  const title = lang === "ko" ? "Canton 트위터 아카이브" : "Canton Twitter Archive";
+  const title = TITLE[lang] || TITLE.en;
+  const translatedLabel = TRANSLATED_LABEL[lang] || TRANSLATED_LABEL.en;
+  const briefLabel = BRIEF_LABEL[lang] || BRIEF_LABEL.en;
+  const loadingLabel = LOADING_LABEL[lang] || LOADING_LABEL.en;
 
   return (
     <div className="bg-canton-card border border-canton-border rounded-[10px] p-5">
@@ -22,14 +53,14 @@ export default function TwitterArchive({ lang }: Props) {
           </p>
         </div>
         <span className="text-[10px] text-zinc-600 bg-zinc-900 px-2 py-1 rounded">
-          AI {lang === "ko" ? "번역" : "Translated"}
+          AI {translatedLabel}
         </span>
       </div>
 
       {data?.ai_summary && (
         <div className="mb-4 p-3 bg-canton-lime/5 border border-canton-lime/20 rounded-md">
           <div className="text-[10px] text-canton-lime/70 uppercase tracking-wider mb-2">
-            {lang === "ko" ? "오늘의 요약" : "Today's Brief"}
+            {briefLabel}
           </div>
           <ul className="space-y-1.5">
             {data.ai_summary.split("·").filter(Boolean).map((line, i) => (
@@ -44,9 +75,7 @@ export default function TwitterArchive({ lang }: Props) {
 
       <div className="space-y-3">
         {items.length === 0 && (
-          <p className="text-[12px] text-zinc-600 py-3">
-            {lang === "ko" ? "트윗을 불러오는 중..." : "Loading tweets..."}
-          </p>
+          <p className="text-[12px] text-zinc-600 py-3">{loadingLabel}</p>
         )}
         {items.map((item, i) => (
           <a

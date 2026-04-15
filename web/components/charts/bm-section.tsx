@@ -44,27 +44,27 @@ export default function BmSection({ network }: BmSectionProps) {
         <div className="h-[120px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={bmData || []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1c1c1f" />
-              <XAxis dataKey="date" tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--canton-border)" />
+              <XAxis dataKey="date" tick={{ fill: "var(--zinc-500)", fontSize: 10 }} tickLine={false} axisLine={false} />
               <YAxis
-                tick={{ fill: "#52525b", fontSize: 10 }}
+                tick={{ fill: "var(--zinc-500)", fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
                 domain={[(dataMin: number) => Math.min(dataMin * 0.9, 0.95), (dataMax: number) => Math.max(dataMax * 1.1, 1.05)]}
                 tickFormatter={(v: number) => v.toFixed(2)}
               />
               <Tooltip
-                contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: "#a1a1aa" }}
+                contentStyle={{ background: "var(--canton-card)", border: "1px solid var(--canton-border)", borderRadius: 8, fontSize: 12, color: "var(--foreground)" }}
+                labelStyle={{ color: "var(--zinc-400)" }}
               />
-              <ReferenceLine y={1} stroke="#c8e64a" strokeDasharray="4 4" strokeOpacity={0.3} label={{ value: "1.0x", position: "right", fill: "#c8e64a", fontSize: 9, opacity: 0.5 }} />
+              <ReferenceLine y={1} stroke="var(--canton-lime)" strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: "1.0x", position: "right", fill: "var(--canton-lime)", fontSize: 9, opacity: 0.6 }} />
               <defs>
                 <linearGradient id="grad-bm" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#c8e64a" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#c8e64a" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--canton-lime)" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="var(--canton-lime)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <Area type="monotone" dataKey="ratio" stroke="#c8e64a" strokeWidth={2} fill="url(#grad-bm)" />
+              <Area type="monotone" dataKey="ratio" stroke="var(--canton-lime)" strokeWidth={2} fill="url(#grad-bm)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>

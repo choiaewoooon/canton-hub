@@ -10,6 +10,7 @@ const TITLES: Record<string, string> = { ko: "캔톤 소식", en: "Canton News",
 
 export default function FeedCard({ lang }: FeedCardProps) {
   const { data } = useFeed(lang);
+  const visibleItems = data?.items?.slice(0, 3) || [];
 
   return (
     <div className="bg-canton-card border border-canton-border rounded-[10px] p-4">
@@ -18,26 +19,10 @@ export default function FeedCard({ lang }: FeedCardProps) {
         <span className="text-[10px] text-zinc-600 bg-zinc-900 px-1.5 py-0.5 rounded">AI 번역</span>
       </div>
 
-      {data?.items && data.items.length > 0 ? (
-        data.items.slice(0, 3).map((item, i) => (
-          <div key={i} className={`py-2.5 ${i < Math.min(data.items.length, 3) - 1 ? "border-b border-canton-border" : ""}`}>
-            <div className="flex items-center gap-1.5 text-[10px] text-zinc-600 uppercase tracking-wider mb-1">
-              {item.source}
-              <span className="text-zinc-700 normal-case tracking-normal">{item.time_ago}</span>
-            </div>
-            <a href={item.url} target="_blank" rel="noopener" className="text-[13px] text-zinc-400 leading-relaxed hover:text-zinc-300 transition">
-              {item.text}
-            </a>
-          </div>
-        ))
-      ) : (
-        <p className="text-[13px] text-zinc-600 py-4">소식을 불러오는 중...</p>
-      )}
-
       {data?.ai_summary && (
-        <div className="mt-3 pt-3 border-t border-canton-border">
-          <div className="flex items-center gap-1.5 text-[10px] mb-2" style={{ color: "#c8e64a80" }}>
-            <span className="inline-block w-1 h-1 rounded-full" style={{ backgroundColor: "#c8e64a" }} />
+        <div className="mb-3 pb-3 border-b border-canton-border">
+          <div className="flex items-center gap-1.5 text-[10px] mb-2" style={{ color: "var(--canton-lime)", opacity: 0.85 }}>
+            <span className="inline-block w-1 h-1 rounded-full" style={{ backgroundColor: "var(--canton-lime)" }} />
             AI 요약
           </div>
           <ul className="space-y-1.5">
@@ -49,6 +34,22 @@ export default function FeedCard({ lang }: FeedCardProps) {
             ))}
           </ul>
         </div>
+      )}
+
+      {visibleItems.length > 0 ? (
+        visibleItems.map((item, i) => (
+          <div key={i} className={`py-2.5 ${i < visibleItems.length - 1 ? "border-b border-canton-border" : ""}`}>
+            <div className="flex items-center gap-1.5 text-[10px] text-zinc-600 uppercase tracking-wider mb-1">
+              {item.source}
+              <span className="text-zinc-700 normal-case tracking-normal">{item.time_ago}</span>
+            </div>
+            <a href={item.url} target="_blank" rel="noopener" className="text-[13px] text-zinc-400 leading-relaxed hover:text-zinc-300 transition">
+              {item.text}
+            </a>
+          </div>
+        ))
+      ) : (
+        <p className="text-[13px] text-zinc-600 py-4">소식을 불러오는 중...</p>
       )}
 
       <a href="#" className="block text-center py-2.5 text-zinc-500 text-xs mt-1 hover:text-zinc-400 transition">
