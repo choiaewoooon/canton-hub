@@ -5,11 +5,10 @@ Canton Hub is split into **two independent repos**:
 ```
 ~/project/Ozzycanton/
 ├── canton-hub/              ← THIS REPO — web dashboard
-│   ├── api/                 ← FastAPI backend → Fly.io
+│   ├── api/                 ← FastAPI backend → Mac local (launchd)
 │   ├── collectors/
 │   ├── web/                 ← Next.js frontend → Vercel
-│   ├── Dockerfile
-│   └── fly.toml
+│   └── scripts/             ← Cloudflare tunnel + Vercel env autoupdate
 │
 ├── canton-telegram-bot/     ← SEPARATE REPO — daily telegram bot
 │   ├── bot.py               ← Runs on home Mac via LaunchAgent
@@ -17,10 +16,10 @@ Canton Hub is split into **two independent repos**:
 │   ├── image_generator.py
 │   └── collectors/
 │
-└── canton-bot/              ← LEGACY — do not modify
-                               Kept as a safety net while splits are verified.
-                               You can delete this after the new folders are
-                               confirmed working.
+└── canton-bot/              ← LEGACY (currently active) — actual LaunchAgent
+                               target as of 2026-04. Do not modify directly;
+                               canton-telegram-bot is the intended successor
+                               once the LaunchAgent is migrated.
 ```
 
 This doc covers **canton-hub only**. The telegram bot is independent — see
@@ -28,265 +27,290 @@ This doc covers **canton-hub only**. The telegram bot is independent — see
 
 ---
 
-## Architecture
+## Architecture (as-deployed)
 
 ```
-┌─────────────────────┐   https   ┌─────────────────────┐
-│ web/ (Next.js)      │ ────────▶ │ api/ (FastAPI)      │
-│ Vercel              │           │ Fly.io (Tokyo)      │
-│ canton-hub.         │           │ canton-api.fly.dev  │
-│   vercel.app        │           │ + APScheduler       │
-└─────────────────────┘           │ + Playwright        │
-                                  └─────────────────────┘
+┌──────────────────────┐     https      ┌──────────────────────────────────┐
+│ web/ (Next.js)       │ ─────────────▶ │ Cloudflare Quick Tunnel          │
+│ Vercel               │                │ *.trycloudflare.com (rotating)   │
+│ canton-hub.          │                └────────────────┬─────────────────┘
+│   vercel.app         │                                 │ localhost:8000
+└──────────────────────┘                                 ▼
+                                        ┌──────────────────────────────────┐
+                                        │ api/ (FastAPI + APScheduler)     │
+                                        │ Mac localhost — managed by       │
+                                        │ launchd (com.cobling.canton-     │
+                                        │ hub-backend)                     │
+                                        │ + Playwright + collectors/*      │
+                                        └──────────────────────────────────┘
 ```
+
+### LaunchAgents (Mac)
+
+| Agent | Purpose |
+|---|---|
+| `com.cobling.canton-hub-backend` | `uvicorn api.main:app --port 8000`, `KeepAlive=true` |
+| `com.cobling.canton-hub-tunnel`  | `scripts/run-tunnel.sh` — spawns `cloudflared tunnel --url http://localhost:8000`, detects the generated `*.trycloudflare.com` URL, and on change invokes `scripts/update-vercel-env.sh` to replace Vercel's `NEXT_PUBLIC_API_URL` + trigger a redeploy. |
+| `com.cobling.canton-bot`         | Telegram daily report (10:00 KST). Currently still targets `canton-bot/bot.py` (legacy). |
 
 The Canton Hub backend is the only long-running data collection service.
 The telegram bot (in `canton-telegram-bot/`) runs its own copy of collectors
-once a day at 9am KST. They are intentionally decoupled — no API calls
-between them, no shared state.
+once a day. They are intentionally decoupled — no API calls between them,
+no shared state.
+
+### Why not Fly.io?
+
+Previously ran on `canton-api.fly.dev`. The Fly trial expired 2026-04 and
+the app was destroyed (`fly apps destroy canton-api`). Going forward the
+Mac-local + Cloudflare Quick Tunnel setup is the production path. Costs:
+Vercel $0, tunnel $0, Mac always-on (~$1/mo power).
 
 ---
 
 ## Prerequisites
 
 1. **Accounts**
-   - Fly.io: `brew install flyctl && fly auth signup`
    - Vercel: `npm i -g vercel && vercel login`
-2. **Secrets** (get these ready)
-   - `COINGECKO_API_KEY` — free Demo key at coingecko.com/developers/dashboard
-   - `RAPIDAPI_KEY` — Twitter API45 on rapidapi.com
-   - `GITHUB_TOKEN` — GitHub PAT (read-only public_repo scope)
-3. **Local `.env`** — `cp .env.example .env` and fill in your values. The
-   real `.env` is gitignored and will NOT be deployed (Dockerfile skips it).
+   - Cloudflare Quick Tunnel (no account needed — random URLs via `cloudflared`)
+2. **Tools on Mac**
+   - Python 3.12+ (`brew install python@3.12`)
+   - `brew install cloudflared`
+3. **Secrets** (local `.env` in `canton-hub/`)
+   - `ANTHROPIC_API_KEY` — for AI tweet summaries
+   - `COINGECKO_API_KEY` — free Demo key
+   - `RAPIDAPI_KEY` — Twitter API (Twttr API via `twitter241.p.rapidapi.com`)
+   - `GITHUB_TOKEN` — read-only public_repo scope
+4. **Local `.env`** — `cp .env.example .env` and fill. Gitignored.
 
 ---
 
-## Phase A — Deploy backend to Fly.io
+## Phase A — Backend (Mac local + launchd)
 
-### A1. Sanity check locally
+### A1. Install
 
 ```bash
 cd /Users/choejaewon/project/Ozzycanton/canton-hub
-
-# Create a fresh venv
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
+```
 
-# Copy secrets in
+### A2. Smoke test
+
+```bash
 cp .env.example .env
-# edit .env with your real values
+# edit .env with real values
 
-# Run the backend
 uvicorn api.main:app --port 8000 --reload
-
-# In another terminal, smoke test:
-curl http://localhost:8000/api/health
-# → {"status":"ok"}
-curl http://localhost:8000/api/price
-# → real price data after ~30s
+# another terminal:
+curl http://localhost:8000/api/health        # → {"status":"ok"}
+curl http://localhost:8000/api/price         # → real price after ~30s
 ```
 
-### A2. Create Fly.io app
+### A3. Install the LaunchAgent
+
+`~/Library/LaunchAgents/com.cobling.canton-hub-backend.plist` should point
+to `venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8000`
+with `KeepAlive=true`.
+
+Load it:
 
 ```bash
-cd /Users/choejaewon/project/Ozzycanton/canton-hub
-
-fly launch --no-deploy --name canton-api --region nrt --copy-config
+launchctl load ~/Library/LaunchAgents/com.cobling.canton-hub-backend.plist
+launchctl list | grep canton-hub-backend   # last exit should be 0
+tail -f /tmp/canton-hub-backend.err.log
 ```
 
-Interactive prompts:
-- `"Would you like to copy its configuration to the new app?"` → **Yes**
-- `"Do you want to tweak these settings before proceeding?"` → **No**
-- `"Would you like to set up a Postgresql database now?"` → **No**
-- `"Would you like to set up an Upstash Redis database?"` → **No**
-- `"Create .dockerignore from .gitignore?"` → **No** (we have our own)
+### A4. Applying code changes
 
-⚠ If `canton-api` name is taken → pick another, then update `app = "..."`
-in `fly.toml` to match.
-
-### A3. Persistent volume (optional but recommended)
+`KeepAlive=true` means the same Python process persists for days. After
+editing `api/scheduler.py` / `collectors/*.py` you MUST restart so imports
+pick up the new code:
 
 ```bash
-fly volumes create canton_data --size 1 --region nrt
-# "Warning! Creating a single volume..." → yes
+launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend
 ```
-
-This stores the `data/*.json` file caches across restarts. Skipping this
-is fine — collectors will rebuild on boot.
-
-### A4. Register secrets
-
-```bash
-fly secrets set \
-  COINGECKO_API_KEY="your_key" \
-  RAPIDAPI_KEY="your_key" \
-  GITHUB_TOKEN="ghp_xxx" \
-  ALLOWED_ORIGINS="*"
-```
-
-> Leave `ALLOWED_ORIGINS=*` for now. We'll tighten it to the Vercel URL at
-> the end of Phase B.
-
-### A5. Deploy!
-
-```bash
-fly deploy
-```
-
-- Takes 5~15 min (Playwright Chromium is the bottleneck)
-- Watch for build errors; OOM → bump `memory_mb` in `fly.toml` from 512 → 768
-
-### A6. Verify
-
-```bash
-fly status                       # → shows https://canton-api.fly.dev
-curl https://canton-api.fly.dev/api/health
-# → {"status":"ok"}
-curl https://canton-api.fly.dev/api/price
-# → real data (wait 30-60s after deploy for first scheduler loop)
-```
-
-✅ **Report back with**: `fly status` output + curl results.
 
 ---
 
-## Phase B — Deploy frontend to Vercel
+## Phase B — Cloudflare Tunnel
 
-### B1. Initialize project
+The tunnel exposes `localhost:8000` over a public `*.trycloudflare.com` URL
+and auto-updates Vercel's env var when the URL changes.
+
+### B1. Install the wrapper
+
+`~/Library/LaunchAgents/com.cobling.canton-hub-tunnel.plist` runs
+`scripts/run-tunnel.sh`. Load:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.cobling.canton-hub-tunnel.plist
+```
+
+Wait ~30s, then:
+
+```bash
+cat /tmp/canton-hub-tunnel-url.txt
+# → https://<random>.trycloudflare.com
+curl "$(cat /tmp/canton-hub-tunnel-url.txt)/api/health"
+# → {"status":"ok"}
+```
+
+### B2. Vercel env autoupdate
+
+`scripts/update-vercel-env.sh` is invoked automatically by `run-tunnel.sh`
+whenever the tunnel URL changes. It:
+
+1. Removes the old `NEXT_PUBLIC_API_URL` production env
+2. Adds the new URL
+3. Triggers a Vercel production redeploy
+
+If this ever fails manually:
 
 ```bash
 cd /Users/choejaewon/project/Ozzycanton/canton-hub/web
-vercel
-```
-
-Interactive prompts:
-- `"Set up and deploy?"` → **Y**
-- `"Which scope?"` → your personal account
-- `"Link to existing project?"` → **N**
-- `"Project name?"` → `canton-hub`
-- `"In which directory is your code located?"` → `./` (enter)
-- `"Want to modify these settings?"` → **N**
-
-Preview URL is printed. The page will show errors because
-`NEXT_PUBLIC_API_URL` isn't set yet.
-
-### B2. Register backend URL
-
-```bash
-vercel env add NEXT_PUBLIC_API_URL production
-# When prompted, paste: https://canton-api.fly.dev
-```
-
-### B3. Promote to production
-
-```bash
+vercel env rm NEXT_PUBLIC_API_URL production --yes
+printf '%s' "$(cat /tmp/canton-hub-tunnel-url.txt)" | vercel env add NEXT_PUBLIC_API_URL production
 vercel --prod
 ```
 
-Prints the prod URL (e.g. `https://canton-hub.vercel.app`).
+---
 
-### B4. Tighten CORS on the backend
+## Phase C — Frontend (Vercel)
 
-Go back to canton-hub root:
+### C1. Initial setup (one time)
 
 ```bash
-cd /Users/choejaewon/project/Ozzycanton/canton-hub
-fly secrets set ALLOWED_ORIGINS="https://canton-hub.vercel.app"
-# ↑ use your actual Vercel URL, no trailing slash
+cd /Users/choejaewon/project/Ozzycanton/canton-hub/web
+vercel link            # link to existing `canton-hub` project
 ```
 
-Fly.io auto-redeploys in ~30s.
+### C2. Deploy manually
 
-### B5. Smoke test in browser
+```bash
+vercel --prod --yes
+```
+
+Prints the prod URL (`https://canton-hub.vercel.app`). Tunnel URL changes
+trigger this automatically.
+
+### C3. Smoke test
 
 - [ ] Dashboard loads with live price + B/M Ratio
-- [ ] `/feed` shows tweet archive + Korean companies section
-- [ ] `/analytics` shows charts
+- [ ] `/feed` shows Twitter archive
+- [ ] `/analytics` shows arbitrage tracker + supply & burn table
 - [ ] Dark/light theme toggle works
-- [ ] Open browser DevTools → Console → no red CORS errors
-
-✅ **Report back with**: Vercel URL + screenshot.
+- [ ] DevTools Console → no red CORS errors
 
 ---
 
-## Phase C — Leave the telegram bot alone (for now)
+## Operations
 
-The telegram bot is in `canton-telegram-bot/` and is fully independent. It
-has its own copy of `collectors/`, its own `.env`, and its own LaunchAgent.
-**You do not need to touch it during this deployment.**
+### Backend restart
 
-After the web is confirmed working for a few days, you may want to migrate
-the bot LaunchAgent to the new folder — see the section at the bottom.
-Until then, the existing `canton-bot/` folder + its LaunchAgent keep running
-the bot exactly as today.
+```bash
+launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend
+```
+
+### Tunnel restart (forces new URL + Vercel redeploy)
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-tunnel
+```
+
+### Force Vercel redeploy only
+
+```bash
+cd /Users/choejaewon/project/Ozzycanton/canton-hub/web
+vercel --prod --yes
+```
+
+### Force AI summary regeneration
+
+The scheduler only calls Anthropic at KST 00:00 and 12:00. To bypass:
+
+```bash
+rm -f /Users/choejaewon/project/Ozzycanton/canton-hub/data/feed_summary.json
+launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend
+# next collect_feed cycle (≤15 min) will regenerate
+```
+
+### Logs
+
+| File | Contents |
+|---|---|
+| `/tmp/canton-hub-backend.err.log` | Python logger output (collectors, scheduler) |
+| `/tmp/canton-hub-backend.out.log` | uvicorn HTTP access logs |
+| `/tmp/canton-hub-tunnel.log` | cloudflared stdout/stderr |
+| `/tmp/canton-hub-tunnel-wrapper.log` | run-tunnel.sh lifecycle (URL detection, Vercel updates) |
 
 ---
 
 ## Secrets reference
 
-|                     | Fly.io (backend) | Vercel (frontend) |
-|---------------------|:----------------:|:-----------------:|
+|                     | Mac `.env` | Vercel |
+|---------------------|:----------:|:------:|
+| ANTHROPIC_API_KEY   | ✅ | |
 | COINGECKO_API_KEY   | ✅ | |
 | RAPIDAPI_KEY        | ✅ | |
 | GITHUB_TOKEN        | ✅ | |
-| ALLOWED_ORIGINS     | ✅ | |
-| NEXT_PUBLIC_API_URL | | ✅ |
+| NEXT_PUBLIC_API_URL |    | ✅ (auto-managed by update-vercel-env.sh) |
 
 ## Cost estimate (monthly)
 
 - Vercel: **$0** (Hobby tier)
-- Fly.io: **$0–2** (shared-1x 512MB always-on + 1GB volume)
+- Cloudflare Quick Tunnel: **$0**
+- Mac electricity: ~$1
+- Anthropic Sonnet 4.6 (2 calls/day): **~$0.6**
+- RapidAPI Twttr API (BASIC → PRO if needed): **$1–25**
+- CoinGecko Demo: **$0**
 
 ## Pitfalls
 
 - **Don't commit `.env`** — `.gitignore` excludes it.
-- **Don't set `ALLOWED_ORIGINS=*` in production** — easy Canton data proxy
-  for bots.
-- **Don't deploy `bot.py` to Fly.io** — it lives in `canton-telegram-bot/`
-  now and runs on your Mac.
-- **Fly.io machine auto-stops if `min_machines_running` is unset** — our
-  `fly.toml` pins it to 1, keeping the scheduler alive.
+- **Code edits don't take effect until LaunchAgent restart** — `KeepAlive`
+  keeps the same Python process (and its cached imports) alive across days.
+  Use `launchctl kickstart -k ...` after any backend edit.
+- **Tunnel URL changes on every cloudflared restart** — but
+  `update-vercel-env.sh` handles the Vercel env refresh + redeploy.
+- **If `canton-hub.vercel.app` returns data from an old tunnel** — the env
+  autoupdate may have failed. Check `/tmp/canton-hub-tunnel-wrapper.log`
+  for `update-vercel-env` errors.
+- **Mac asleep = service down** — if the Mac sleeps, the backend + tunnel
+  stop. Set System Settings → Battery → Power Adapter → Prevent automatic
+  sleeping. (Irrelevant for desktops.)
 
 ---
 
-## LaunchAgent migration (optional, do AFTER web deploy works)
+## LaunchAgent migration for the telegram bot (optional, future work)
 
-Once canton-hub is stable, switch your existing bot LaunchAgent over to
-point at the new folder:
+As of 2026-04 the `com.cobling.canton-bot` LaunchAgent still targets
+`canton-bot/bot.py` (the pre-split legacy folder). Both `canton-bot/` and
+`canton-telegram-bot/` have the updated Twitter collector, so the daily
+report works — but the docs assume the new path. Migrate when convenient:
 
 ```bash
-# 1. Stop the currently-loaded plist
+# 1. Stop
 launchctl unload ~/Library/LaunchAgents/com.cobling.canton-bot.plist
 
-# 2. Update the paths inside it
-sed -i '' \
-  's|/canton-bot/|/canton-telegram-bot/|g' \
+# 2. Point at canton-telegram-bot/
+sed -i '' 's|/canton-bot/|/canton-telegram-bot/|g' \
   ~/Library/LaunchAgents/com.cobling.canton-bot.plist
 
-# 3. Copy your existing .env into canton-telegram-bot/
-cp ~/project/Ozzycanton/canton-bot/.env \
-   ~/project/Ozzycanton/canton-telegram-bot/.env
-
-# 4. Create a fresh venv in canton-telegram-bot/
+# 3. Ensure .env + venv exist on target
+cp ~/project/Ozzycanton/canton-bot/.env ~/project/Ozzycanton/canton-telegram-bot/.env
 cd ~/project/Ozzycanton/canton-telegram-bot
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
 
-# 5. Test a manual run (preview mode, no telegram send)
+# 4. Dry run
 TELEGRAM_BOT_TOKEN= python bot.py --now
-# → should print a daily report to stdout
 
-# 6. If step 5 looked good, reload the plist
+# 5. Reload + kickstart
 launchctl load ~/Library/LaunchAgents/com.cobling.canton-bot.plist
-
-# 7. Fire manually to verify end-to-end
 launchctl kickstart gui/$(id -u)/com.cobling.canton-bot
 tail -f ~/project/Ozzycanton/canton-telegram-bot/launchd_stdout.log
 ```
-
-After a few days of successful runs from the new location, delete the old
-`canton-bot/` folder.
