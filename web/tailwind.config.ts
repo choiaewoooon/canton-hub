@@ -17,6 +17,7 @@ const config: Config = {
           bg: "var(--canton-bg)",
           card: "var(--canton-card)",
           border: "var(--canton-border)",
+          "border-strong": "var(--canton-border-strong)",
           up: "var(--canton-up)",
           down: "var(--canton-down)",
           burn: "var(--canton-burn)",

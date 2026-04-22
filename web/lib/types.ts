@@ -232,6 +232,29 @@ export interface BurnBreakdown {
   cumulative_burned_from_traffic: number | null;
 }
 
+export interface TrendingKeyword {
+  keyword: string;
+  count: number;
+  last_seen: string;
+}
+
+export interface TrendingData {
+  keywords: TrendingKeyword[];
+  fetched_at: string | null;
+}
+
+export interface KpiHistoryEntry {
+  ts: string;
+  active_addresses_24h: number | null;
+  total_transfers_24h: number | null;
+  private_tx_ratio: number | null;
+  super_validators: number | null;
+}
+
+export interface KpiHistoryData {
+  entries: KpiHistoryEntry[];
+}
+
 export interface GovernanceData {
   active_proposals: number;
   total_final: number;

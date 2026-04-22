@@ -14,6 +14,8 @@ import type {
   RealtimePrices,
   HoldersData,
   KrCompaniesData,
+  TrendingData,
+  KpiHistoryData,
 } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -90,5 +92,17 @@ export function useHolders() {
 export function useKrCompanies() {
   return useSWR<KrCompaniesData>(`${API}/api/analytics/kr-companies`, fetcher, {
     refreshInterval: 1_800_000, // 30min
+  });
+}
+
+export function useTrending() {
+  return useSWR<TrendingData>(`${API}/api/analytics/trending`, fetcher, {
+    refreshInterval: 900_000, // 15min
+  });
+}
+
+export function useKpiHistory() {
+  return useSWR<KpiHistoryData>(`${API}/api/analytics/kpi-history`, fetcher, {
+    refreshInterval: 600_000, // 10min
   });
 }
