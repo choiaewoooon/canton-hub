@@ -13,8 +13,8 @@
 | HTML parsing | beautifulsoup4 |
 | Headless browser | Playwright + Chromium |
 | SSE | sse-starlette |
-| Deploy | Fly.io `nrt` (shared-1x, 512MB, volume `canton_data`, min_machines_running=1) |
-| Frontend | `web/` deployed separately on Vercel |
+| Deploy | Mac local uvicorn (launchd `KeepAlive`) + Cloudflare Quick Tunnel (`scripts/run-tunnel.sh` 경유, 터널 URL 변경 시 `scripts/update-vercel-env.sh`가 Vercel env 자동 갱신) |
+| Frontend | `web/` deployed separately on Vercel (`canton-hub.vercel.app`) |
 
 ---
 
@@ -123,7 +123,7 @@ api/main.py
 | GET | `/api/analytics/burn-breakdown` | — | `burn_breakdown` | `{categories: [{name, amount, pct}, ...]}` |
 | GET | `/api/analytics/holders` | — | `holders` | `{total, top: [{address, balance, pct}, ...]}` |
 | GET | `/api/analytics/kr-companies` | — | `kr_companies` | `{companies: [{name, holdings, source}, ...]}` |
-| GET | `/api/health` | — | — | `{status: "ok"}` (Fly.io health check) |
+| GET | `/api/health` | — | — | `{status: "ok"}` (Cloudflare Tunnel 헬스체크) |
 
 **WHEN** a route's cache key is missing/expired → return HTTP 503 with `{error: "cache_miss", key: "<key>"}`. Routes do **not** trigger on-demand collection.
 

@@ -54,8 +54,8 @@ Canton Hub는 Canton Network($CC)의 온체인 상태, 가격, 거래소 분포,
 |--------|------|------|----------|
 | DAU | 일일 대시보드 방문자 | TODO | Vercel Analytics |
 | Telegram → Web 전환율 | 텔레그램 링크에서 유입된 사용자 비율 | TODO | UTM 파라미터 |
-| P50 API latency (`/api/price`) | 중앙값 응답시간 | < 300ms | Fly.io 메트릭 |
-| P95 API latency (realtime-prices) | 상위 95% 응답시간 | < 800ms | Fly.io 메트릭 |
+| P50 API latency (`/api/price`) | 중앙값 응답시간 | < 300ms | uvicorn 액세스 로그 |
+| P95 API latency (realtime-prices) | 상위 95% 응답시간 | < 800ms | uvicorn 액세스 로그 |
 | SSE 연결 유지 시간 | 평균 연결 지속 | TODO | 서버 로그 |
 | Feed 언어별 사용 비율 | ko/en/ja/zh 호출 비율 | TODO (ko ≥ 60% 가설) | API 로그 |
 | KR company data confidence 분포 | high/medium/low 비율 | high ≥ 70% | `/api/analytics/kr-companies` 집계 |
@@ -71,7 +71,7 @@ Canton Hub는 Canton Network($CC)의 온체인 상태, 가격, 거래소 분포,
 |------|---------|
 | 가격 갱신 주기 | 일반 price 30s, realtime-prices 5s |
 | SSE 지연 | 서버 push → 클라이언트 수신 < 1s |
-| API cold start | Fly.io scale-to-zero 시 첫 요청 < 3s |
+| API cold start | launchd가 상시 구동 (`KeepAlive=true`) — cold start 없음. 터널 재연결 시 지연 < 30s |
 
 ### 5.2 Internationalization
 
@@ -108,13 +108,13 @@ Canton Hub는 Canton Network($CC)의 온체인 상태, 가격, 거래소 분포,
 
 ## 6. Roadmap
 
-**Current Phase**: Post-split deployment (Backend → Fly.io, Frontend → Vercel)
+**Current Phase**: Post-split deployment (Backend → Mac local + Cloudflare Tunnel, Frontend → Vercel)
 
 | Phase | 상태 | 주요 작업 |
 |-------|------|----------|
 | Phase 0 — Monolith | 완료 | 단일 FastAPI 앱에 모든 엔드포인트 구현 |
-| Phase 1 — Split & Deploy | **진행 중** | Backend/Frontend 분리 → Fly.io + Vercel 배포, 환경변수 정리, CORS 설정, 헬스체크 |
-| Phase 2 — Observability | 계획 | Fly.io 메트릭 + Sentry + 구조화 로그, Success Metrics 베이스라인 측정 |
+| Phase 1 — Split & Deploy | 완료 | Backend/Frontend 분리, Vercel 프론트 + Mac launchd 백엔드 + Cloudflare Quick Tunnel로 안정화 (2026-04 Fly.io 트라이얼 만료로 전환) |
+| Phase 2 — Observability | 계획 | uvicorn 액세스 로그 분석 + Sentry + 구조화 로그, Success Metrics 베이스라인 측정 |
 | Phase 3 — Data depth | 계획 | KR company 탐지 자동화, holder category 분류 정확도 개선, 거버넌스 투표 히스토리 확장 |
 | Phase 4 — Community features | 계획 (TODO 검토) | 알림/워치리스트, 텔레그램 봇 연동 강화 |
 

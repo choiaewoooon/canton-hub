@@ -20,7 +20,7 @@ Next.js 16 기반 Canton Network ($CC) 실시간 대시보드. 상위 `canton-hu
 
 - Node.js 20+
 - npm
-- 동작 중인 Canton Hub 백엔드 (로컬: `http://localhost:8000`, 프로덕션: `https://canton-api.fly.dev`)
+- 동작 중인 Canton Hub 백엔드 (로컬: `http://localhost:8000`, 프로덕션: Cloudflare Quick Tunnel `*.trycloudflare.com` — `scripts/update-vercel-env.sh`가 Vercel env에 자동 주입)
 
 ### Installation
 
@@ -73,7 +73,7 @@ Vercel 프로젝트 설정에서 **Root Directory를 `canton-hub/web`**으로 �
 
 | 변수 | 설명 | 필수 |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | Canton Hub 백엔드 base URL (예: `https://canton-api.fly.dev`) | O |
+| `NEXT_PUBLIC_API_URL` | Canton Hub 백엔드 base URL (예: `https://<random>.trycloudflare.com`). 수동 설정 불필요 — `scripts/update-vercel-env.sh`가 터널 URL 변경 시 자동 갱신 | O |
 
 > `NEXT_PUBLIC_` prefix가 있으므로 클라이언트 번들에 포함됨. 시크릿 값 넣지 말 것.
 
@@ -122,5 +122,5 @@ web/
 | [docs/DEVELOPMENT_GUIDE.md](./docs/DEVELOPMENT_GUIDE.md) | 코딩 표준 |
 | [docs/SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md) | 결정 기록 |
 | [../CLAUDE.md](../CLAUDE.md) | 백엔드 운영 매뉴얼 |
-| [../DEPLOY.md](../DEPLOY.md) | Fly.io + Vercel 배포 가이드 |
+| [../DEPLOY.md](../DEPLOY.md) | launchd + Cloudflare Tunnel + Vercel 배포 가이드 |
 | [AGENTS.md](./AGENTS.md) | Next.js 16 브레이킹 체인지 주의 |

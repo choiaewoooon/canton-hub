@@ -55,16 +55,22 @@ docker run --rm -p 8000:8000 --env-file .env canton-hub-api
 pytest tests/
 ```
 
-### Deploy (Fly.io)
+### Deploy (Mac local + Cloudflare Tunnel)
 
-`DEPLOY.md` 참조. 요약:
+`DEPLOY.md` 참조. 현재 구조: uvicorn을 `launchd`로 상시 구동, `cloudflared` Quick Tunnel이 public URL을 만들어 Vercel의 `NEXT_PUBLIC_API_URL`을 자동 갱신.
 
 ```bash
-fly launch --no-deploy --name canton-api --region nrt --copy-config
-fly volumes create canton_data --size 1 --region nrt
-fly secrets set COINGECKO_API_KEY=xxx RAPIDAPI_KEY=xxx GITHUB_TOKEN=xxx ALLOWED_ORIGINS=https://canton-hub.vercel.app
-fly deploy
+# 백엔드 재기동 (코드 변경 반영)
+launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend
+
+# 터널 재기동 (새 URL + Vercel 재배포)
+launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-tunnel
+
+# 프론트 수동 재배포
+cd web && vercel --prod --yes
 ```
+
+> 이전 Fly.io 배포(`canton-api.fly.dev`)는 2026-04 트라이얼 만료로 destroy됨.
 
 ## Environment Variables
 
@@ -73,7 +79,8 @@ fly deploy
 | 변수 | 설명 | 필수 |
 |---|---|---|
 | `COINGECKO_API_KEY` | CoinGecko Demo API Key (429 방지) | 권장 |
-| `RAPIDAPI_KEY` | Twitter API45 키 (`/api/feed`) | O |
+| `RAPIDAPI_KEY` | Twttr API 키 (`twitter241.p.rapidapi.com`, `/api/feed`) | O |
+| `ANTHROPIC_API_KEY` | Claude Sonnet 4.6 (`/api/feed` AI 요약) | O |
 | `GITHUB_TOKEN` | GitHub PAT, `public_repo` 읽기 (`/api/governance`) | O |
 | `ALLOWED_ORIGINS` | 프로덕션 CORS 허용 도메인 (쉼표 구분) | 프로덕션만 |
 | `TIMEZONE` | 로그 타임스탬프 TZ | 선택 (기본 `Asia/Seoul`) |
@@ -94,8 +101,7 @@ canton-hub/
 ├── data/             # 파일 캐시 폴백
 ├── tests/api/        # pytest
 ├── config.py         # 환경변수 + 상수
-├── Dockerfile        # python:3.12-slim + Chromium
-├── fly.toml          # Fly.io 설정 (region=nrt, shared-1x 512MB)
+├── scripts/          # run-tunnel.sh, update-vercel-env.sh (Cloudflare 터널)
 └── requirements.txt
 ```
 
@@ -119,7 +125,7 @@ canton-hub/
 | 문서 | 설명 |
 |---|---|
 | [CLAUDE.md](./CLAUDE.md) | 에이전트 운영 매뉴얼 |
-| [DEPLOY.md](./DEPLOY.md) | Fly.io / Vercel 배포 가이드 |
+| [DEPLOY.md](./DEPLOY.md) | launchd / Cloudflare Tunnel / Vercel 배포 가이드 |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 시스템 아키텍처 + 라우트 맵 |
 | [docs/DATA_GUIDE.md](./docs/DATA_GUIDE.md) | 외부 데이터 소스 + ETL |
 | [docs/DEVELOPMENT_GUIDE.md](./docs/DEVELOPMENT_GUIDE.md) | 코딩 표준 |

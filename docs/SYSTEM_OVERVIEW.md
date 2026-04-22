@@ -19,8 +19,8 @@
 | Legacy Repo | `canton-bot/` (pre-split monorepo, kept as safety net) |
 | Backend Stack | FastAPI + Python 3.11, TTLCache (no DB) |
 | Frontend Stack | Next.js 14 + Tailwind + Tremor + Recharts (`web/`) |
-| Backend Deploy | Fly.io (Tokyo region, single VM) |
-| Frontend Deploy | Vercel |
+| Backend Deploy | Mac local `uvicorn` (launchd `com.cobling.canton-hub-backend`, `KeepAlive=true`) exposed via Cloudflare Quick Tunnel — Fly.io deployment retired 2026-04-20 (trial expired, app destroyed) |
+| Frontend Deploy | Vercel (`canton-hub.vercel.app`) |
 | Data Sources | CoinGecko, CantonScan (unofficial), exchange public APIs, Twitter |
 | Persistence | **None** — in-memory TTLCache only (see ADR-001) |
 
@@ -40,6 +40,9 @@
 | 2026-04-14 | P3.1 — Dark/light theme | Added theme toggle via CSS variable swap. **Zero component-level edits** across ~369 color references (see ADR-004). |
 | 2026-04-15 | **P4 — Folder split** | `canton-bot/` divided into `canton-hub/` (this repo) + `canton-telegram-bot/`. Eliminates rate-limit coupling and deployment coupling. Legacy kept as safety net. (see ADR-003) |
 | 2026-04-15 | P4.1 — Docs init | `docs-init` run. Initial AI Native documentation set generated (this file + ARCHITECTURE, PRD, DATA_GUIDE, DEVELOPMENT_GUIDE). |
+| 2026-04-19 | P5 — Dashboard/Analytics/Feed redesign + revert | Linear/Vercel 톤의 재설계(`components/ch/*`) 후 사용자 피드백에 따라 원복. ArbitrageTracker가 Analytics 핵심 기능임이 확인되어 복구, `SupplyTable` (공급/번 7일)만 신규 섹션으로 유지. |
+| 2026-04-19 | P5.1 — Twitter API 전환 | BASIC 플랜 쿼터 소진으로 `twitter-api45` 실패 → 실 구독은 Twttr API(`twitter241.p.rapidapi.com`)였음을 확인. Collector를 `user-replies` 엔드포인트로 교체하고 `canton-bot`/`canton-telegram-bot`에도 동일 반영. |
+| 2026-04-20 | P6 — Cost gating + deploy migration | Anthropic Sonnet 4.6 호출을 KST 00/12시 2회로 게이팅(`data/feed_summary.json` 파일 캐시), 월 $26 → $0.6. Fly.io 트라이얼 만료로 `canton-api` 앱 destroy, Mac local uvicorn + Cloudflare Quick Tunnel + Vercel auto-env-update 구조로 확정. |
 | TODO | — | Next phase not yet planned. |
 
 ---
@@ -60,7 +63,7 @@
 | **Decision** | Use thread-safe `TTLCache` instead of Postgres / Redis / SQLite. |
 | **Before** | (none — greenfield) |
 | **After** | `api/cache.py` |
-| **Reason** | Single-VM deployment on Fly.io. All data is derived/cacheable from upstream APIs. No user state to persist. |
+| **Reason** | Single-process deployment (originally Fly.io single VM, now Mac local uvicorn). All data is derived/cacheable from upstream APIs. No user state to persist. |
 | **Rule** | **NEVER** introduce a database without first proving it's actually needed (user state? multi-VM? audit trail?). |
 | **Impact** | Cold starts return empty responses for ~30s until the scheduler fills cache. Documented in DATA_GUIDE.md. |
 
@@ -73,7 +76,7 @@
 | **After** | All modules in `collectors/` |
 | **Reason** | Prevent cascading failures — one broken upstream must not crash the scheduler or take down unrelated endpoints. |
 | **Rule** | `raise` inside `collectors/` is an **anti-pattern** → use `logger.warning(...)` + return empty result. |
-| **Impact** | Silent failures possible if logs aren't monitored. Mitigation: Fly.io log alerting (TODO). |
+| **Impact** | Silent failures possible if logs aren't monitored. Mitigation: tail `/tmp/canton-hub-backend.err.log` for `logger.warning` patterns (TODO: automated alerting). |
 
 ### ADR-003 — Folder split from canton-bot/ (2026-04-15)
 
@@ -107,7 +110,8 @@
 | KI-02 | Data / CantonScan | CantonScan API is **unofficial** internal endpoint (`fossil-outlook-levitate-gloomy.cantonscan.com`). Could break without notice. | Collector catches errors per ADR-002. Monitor logs. |
 | KI-03 | Data / CoinGecko | Free-tier rate limit remains a concern in production even post-split. | Single-process polling + TTLCache. Consider paid tier if 429s recur. |
 | KI-04 | Data / Bithumb | Bithumb wallet shows **49 CC** current balance despite **456K CC** lifetime IN — confusing UX. | Data is **correct** — balance moved out. UI should clarify "lifetime IN" vs "current". TODO UX copy fix. |
-| KI-05 | Ops | No alerting on silent collector failures (see ADR-002 impact). | TODO: Fly.io log-based alerts for `logger.warning` patterns in `collectors/`. |
+| KI-05 | Ops | No alerting on silent collector failures (see ADR-002 impact). | TODO: log tail + alerting pipeline on `/tmp/canton-hub-backend.err.log` for `logger.warning` patterns in `collectors/`. |
+| KI-06 | Ops | Mac 절전 시 백엔드 + 터널 중단 → 프로덕션 다운. | System Settings → Battery → Power Adapter → Prevent automatic sleeping. 또는 Mac 상주 전환 후 remote monitoring 설정. |
 
 ---
 
@@ -115,7 +119,7 @@
 
 | ID | Symptom | Root Cause | Fix | Lesson |
 |---|---|---|---|---|
-| L1 | Bot fails at 9am KST with `가격 데이터 수집 실패`. | Bot scheduler and web scheduler both hit CoinGecko from the **same Fly.io IP** at the same minute → 429. | Split repos so bot and web have independent processes / optionally independent IPs (ADR-003). | **Always test what happens when two services share an upstream.** Shared egress IP = shared quota. |
+| L1 | Bot fails at 9am KST with `가격 데이터 수집 실패`. | Bot scheduler and web scheduler both hit CoinGecko from the **same egress IP** at the same minute → 429. | Split repos so bot and web have independent processes / optionally independent IPs (ADR-003). | **Always test what happens when two services share an upstream.** Shared egress IP = shared quota. |
 | L2 | "Upbit listing triggered Binance cold wallet moves" hypothesis fit the timing perfectly. | Narrative-fit bias. Timeline correlation ≠ causation. | On-chain topology investigation (40+ wallets) **disproved** the hypothesis. | **Be skeptical of narrative-fit hypotheses. Verify with data before adding to evidence-based lists.** |
 | L3 | Refactor to "shared API layer between bot and web" was getting complex and fragile. | Premature abstraction — the two services have different cadences, different failure modes, different deploy cycles. | Duplicate `collectors/` across `canton-hub/` and `canton-telegram-bot/`. | **Sometimes duplication beats coupling.** Split was easier than shared API. |
 | L4 | Adding "Binance" wallets based on a CantonScan label. | CantonScan label `binance` is the **same key as `binance-us`**, which was reused by `iBTC`/`cBTC` as a name squat. "Binance" ≠ "binance-us" in that dataset. | Manual on-chain verification before inclusion. Cross-check with topology + known exchange addresses. | **Always verify identity before adding to evidence-based lists.** Label strings are not identity. |

@@ -243,15 +243,15 @@ Every entry: symptom → root cause → search query → fix.
 | Fix | Use demo API key env var, add file cache fallback, bump TTL (≥300s) |
 | Prevention | Single source of truth: only canton-hub collects; bot reads canton-hub API |
 
-### 5.2 Playwright OOM on Fly.io
+### 5.2 Backend code change not taking effect
 
 | Field | Value |
 |-------|-------|
-| Symptom | Deploy succeeds but container OOM-killed during `playwright install chromium` or first scrape |
-| Root cause | 256 MB VM insufficient for Chromium |
-| Search query | `grep -n "memory_mb" fly.toml` |
-| Fix | Set `memory_mb = 512` in `[[vm]]` block of `fly.toml` |
-| Prevention | Any Playwright-using service requires ≥512 MB |
+| Symptom | 파일을 수정·저장했는데도 로그/동작이 이전 코드 그대로 |
+| Root cause | `com.cobling.canton-hub-backend` LaunchAgent가 `KeepAlive=true`로 같은 프로세스를 며칠 단위 유지 → 인메모리에 올라간 old module 객체가 계속 사용됨 |
+| Search query | `ps -ef \| grep uvicorn`, `stat -f "%Sm %N" __pycache__/<module>.cpython-312.pyc` |
+| Fix | `launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend` — KeepAlive가 즉시 새 프로세스 스폰 |
+| Prevention | 코드 변경 후 체크리스트에 kickstart 포함. 2026-04-20 canton-bot에서 동일 증상으로 Twitter 호스트 교체가 3일 지연됨 |
 
 ### 5.3 CantonScan SPA Load Race
 

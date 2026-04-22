@@ -79,7 +79,7 @@ web/
 | 타입 체크 | `npx tsc --noEmit` |
 | Vercel 배포 | `vercel --prod` |
 
-**백엔드 연결**: 로컬에서는 `NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev`. 프로덕션은 Vercel env에 `https://canton-api.fly.dev` 등록.
+**백엔드 연결**: 로컬에서는 `NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev`. 프로덕션은 Cloudflare Quick Tunnel이 생성하는 `*.trycloudflare.com` URL이 `scripts/update-vercel-env.sh`에 의해 Vercel env에 자동 주입됨 (이전 `canton-api.fly.dev`는 2026-04 폐기).
 
 ## 2. Workflow Protocols
 

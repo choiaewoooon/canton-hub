@@ -1,6 +1,6 @@
 # Canton Hub — Backend
 
-Canton Network 실시간 대시보드의 FastAPI 백엔드. CoinGecko / CantonScan / RapidAPI 수집기를 `APScheduler`로 주기 실행하고 결과를 인메모리 TTL 캐시에 적재한 뒤 REST 엔드포인트로 서빙한다. 프론트엔드(`web/`)는 별도로 Vercel에 배포되고, 이 백엔드는 Fly.io에 배포된다.
+Canton Network 실시간 대시보드의 FastAPI 백엔드. CoinGecko / CantonScan / RapidAPI 수집기를 `APScheduler`로 주기 실행하고 결과를 인메모리 TTL 캐시에 적재한 뒤 REST 엔드포인트로 서빙한다. 프론트엔드(`web/`)는 Vercel에 배포되고, 이 백엔드는 **Mac 로컬 uvicorn + Cloudflare Quick Tunnel** 구조로 서빙된다 (이전 Fly.io 배포는 2026-04 트라이얼 만료로 폐기됨).
 
 - Project Path: `/Users/choejaewon/project/Ozzycanton/canton-hub`
 - Branch 전략: main + feature branch
@@ -22,8 +22,9 @@ Canton Network 실시간 대시보드의 FastAPI 백엔드. CoinGecko / CantonSc
 | 동적 스크래핑 | Playwright + Chromium | 1.40+ |
 | SSE 스트리밍 | sse-starlette | 2.0+ |
 | 설정 | python-dotenv | 1.0+ |
-| 컨테이너 | Docker | Dockerfile + fly.toml |
-| 배포 | Fly.io | region=nrt, shared-1x 512MB |
+| LLM | Anthropic Sonnet 4.6 | `tweet_summarizer.py` — KST 00시/12시 2회만 호출 (비용 게이팅) |
+| 배포 | Mac launchd + Cloudflare Quick Tunnel | `com.cobling.canton-hub-backend` + `com.cobling.canton-hub-tunnel` |
+| 터널 | cloudflared | `scripts/run-tunnel.sh` + 자동 Vercel env 업데이트 |
 
 ## Project Structure
 
@@ -52,9 +53,10 @@ canton-hub/
 ├── config.py                # .env 로드 + 상수
 ├── run_api.py               # 로컬 개발 편의 스크립트
 ├── requirements.txt         # backend-only deps (텔레그램/이미지 생성 없음)
-├── Dockerfile               # python:3.12-slim + Playwright Chromium
-├── fly.toml                 # region=nrt, vol=canton_data, health=/api/health
-└── .dockerignore
+├── scripts/
+│   ├── run-tunnel.sh        # cloudflared 래퍼 (LaunchAgent가 호출)
+│   └── update-vercel-env.sh # 터널 URL 변경 시 NEXT_PUBLIC_API_URL 자동 갱신
+└── data/feed_summary.json   # AI 요약 캐시 (KST 00/12시 윈도우 기준)
 ```
 
 ---
@@ -77,10 +79,11 @@ canton-hub/
 | 헬스체크 | `curl http://localhost:8000/api/health` |
 | 단일 엔드포인트 smoke | `curl http://localhost:8000/api/price` |
 | 테스트 | `pytest tests/` |
-| 로컬 Docker 빌드 | `docker build -t canton-hub-api .` |
-| Fly 배포 | `fly deploy` (fly.toml 참조) |
-| Fly 로그 | `fly logs` |
-| Fly 시크릿 설정 | `fly secrets set KEY=value` |
+| 백엔드 재기동 | `launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend` |
+| 터널 재기동 (새 URL + Vercel 자동 갱신) | `launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-tunnel` |
+| 현재 터널 URL | `cat /tmp/canton-hub-tunnel-url.txt` |
+| 백엔드 로그 | `tail -f /tmp/canton-hub-backend.err.log` |
+| Vercel 재배포 | `cd web && vercel --prod --yes` |
 
 ## 2. Workflow Protocols (워크플로우)
 
@@ -148,14 +151,16 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 | 엔드포인트 동작 | `curl <url>` → 2xx + 예상 shape | 코드 읽어봤음, "동작할 것" |
 | 스케줄러 루프 동작 | 로그에 `cached:` 라인 출현 | 함수 호출 추적 |
 | Playwright 설치 성공 | `playwright install chromium` exit 0 | `pip install` 성공 |
-| Fly 배포 성공 | `curl https://canton-api.fly.dev/api/health` → 200 | `fly deploy` exit 0 (앱이 crash loop일 수 있음) |
+| 코드 변경 반영 | `launchctl kickstart -k ...` 후 `/tmp/canton-hub-backend.err.log`에 최신 import 로그 | 파일 수정 저장만 함 (KeepAlive 프로세스는 재기동 전까지 인메모리 구 코드 유지) |
+| 프로덕션 동작 | `curl https://canton-hub.vercel.app` + 터널 URL `/api/health` → 200 | Vercel 빌드 성공 |
 
 ## 6. STOP Conditions
 
 다음 상황에서 즉시 중단하고 질문:
 - CoinGecko 429가 연속 발생 → Demo API key 없는지 확인
 - CantonScan 응답 shape이 바뀐 것으로 보임 → 웹 페이지 수동 검사 요청
-- Playwright 빌드 OOM → fly.toml memory_mb 상향 권한 요청
+- Mac이 절전 상태로 들어가 백엔드/터널이 멈춤 → Power Adapter sleep 설정 확인
+- 터널 URL이 바뀌었는데 Vercel env 갱신이 실패 → `/tmp/canton-hub-tunnel-wrapper.log`에서 `update-vercel-env` 에러 확인
 - 캐시 키 충돌 의심 → scheduler + route 양쪽 grep
 
 → **추측하지 말고 질문하세요.**
@@ -176,7 +181,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 | [docs/DATA_GUIDE.md](./docs/DATA_GUIDE.md) | 데이터 소스·수집 흐름 파악 | 새 collector/외부 API 추가 |
 | [docs/DEVELOPMENT_GUIDE.md](./docs/DEVELOPMENT_GUIDE.md) | 코딩 패턴 확인 | 새 패턴/안티패턴 발견 |
 | [docs/SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md) | 과거 결정 배경 파악 | 매 작업 완료 시 |
-| [DEPLOY.md](./DEPLOY.md) | 배포 작업 | fly/vercel 설정 변경 |
+| [DEPLOY.md](./DEPLOY.md) | 배포 작업 | launchd/tunnel/Vercel 설정 변경 |
 
 ## 9. Documentation Rules (문서 최신화 규칙)
 
@@ -187,7 +192,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 | 캐시 키 신설/삭제 | ARCHITECTURE.md Cache Key Map | 키 + TTL + 소비처 |
 | `requirements.txt` 변경 | CLAUDE.md Tech Stack + README.md | 버전 업데이트 |
 | `.env.example` 변경 | README.md Env Vars + DEPLOY.md Secrets | 변수 + 필수여부 |
-| `fly.toml` / `Dockerfile` 변경 | DEPLOY.md + README.md | 리소스/명령어 |
+| `scripts/run-tunnel.sh` / LaunchAgent plist 변경 | DEPLOY.md + README.md | 운영 명령어 |
 | 새 버그 패턴 발견 | CLAUDE.md Known Patterns + DEVELOPMENT_GUIDE.md | 패턴 + 검색 쿼리 |
 | 아키텍처 결정 | ARCHITECTURE.md + SYSTEM_OVERVIEW.md ADR | 설계 + 결정 기록 |
 | 작업 완료 | SYSTEM_OVERVIEW.md Phase History | 단계 추가 |
@@ -202,3 +207,6 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 | 날짜 | 변경 | 이유 |
 |---|---|---|
 | 2026-04-15 | 초기 생성 | docs-init (canton-bot 분리 직후 재작성) |
+| 2026-04-20 | 배포 구조를 Fly.io → Mac local + Cloudflare Quick Tunnel로 전환 반영 | Fly 트라이얼 만료, `canton-api` 앱 destroy. 새 구조는 이미 launchd로 운영 중 |
+| 2026-04-20 | `tweet_summarizer` 호출을 KST 00/12시 2회로 게이팅 | Sonnet 4.6 비용이 월 $26 수준까지 오름. 97% 절감 (~$0.6/월)으로 낮춤 |
+| 2026-04-20 | Twitter collector 호스트 교체 (`twitter-api45` → `twitter241`) | BASIC 플랜 쿼터 소진. 실제 구독은 Twttr API(`twitter241.p.rapidapi.com`)였음 |

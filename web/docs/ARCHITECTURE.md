@@ -39,7 +39,9 @@
 ┌──────────────────────────────────────────────────────┐
 │      canton-hub FastAPI backend                      │
 │      dev : http://localhost:8000                     │
-│      prod: https://canton-api.fly.dev                │
+│      prod: Mac localhost:8000                        │
+│          ↑ Cloudflare Quick Tunnel                   │
+│            *.trycloudflare.com → localhost:8000      │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -132,7 +134,7 @@ Source: `lib/api.ts` (REST) + `lib/sse.ts` (streaming).
 | `useKrCompanies()` | `/api/analytics/kr-companies` | 1800s | `KrCompaniesData` |
 | `useRealtimePrice()` (SSE) | `/api/sse/price` | stream | `PriceData` events |
 
-**Base URL**: `process.env.NEXT_PUBLIC_API_URL` (dev `http://localhost:8000`, prod `https://canton-api.fly.dev`).
+**Base URL**: `process.env.NEXT_PUBLIC_API_URL` (dev `http://localhost:8000`, prod `https://<random>.trycloudflare.com` — Cloudflare Quick Tunnel이 Mac localhost:8000으로 전달. 터널 URL 변경 시 `scripts/update-vercel-env.sh`가 자동 갱신).
 **Fetcher**: 공통 `fetch` wrapper — non-OK response throw, SWR `onErrorRetry` 기본값 사용.
 
 ---
@@ -253,7 +255,7 @@ tailwind.config.ts
 
 | Name | Scope | dev | prod |
 |------|-------|-----|------|
-| `NEXT_PUBLIC_API_URL` | client+server | `http://localhost:8000` | `https://canton-api.fly.dev` |
+| `NEXT_PUBLIC_API_URL` | client+server | `http://localhost:8000` | `https://<random>.trycloudflare.com` (Cloudflare Quick Tunnel, 자동 갱신) |
 
 **Rule**: 공개 키만 `NEXT_PUBLIC_*` 사용. 비공개 토큰은 추가 금지 (현재 없음).
 
