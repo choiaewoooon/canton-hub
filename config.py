@@ -35,6 +35,12 @@ CANTONSCAN_BASE_URL = "https://www.cantonscan.com"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 # ============================================================
+# DeepL Free API — ko→en/ja/zh feed summary translation
+# ============================================================
+DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
+DEEPL_API_URL = "https://api-free.deepl.com/v2/translate"
+
+# ============================================================
 # Misc collector settings
 # ============================================================
 # Number of recent tweets per account to fetch

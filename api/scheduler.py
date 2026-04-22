@@ -1,15 +1,131 @@
 """Background data collection scheduler."""
 import asyncio
+import json
 import logging
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from api.cache import TTLCache
 
 logger = logging.getLogger(__name__)
 
+# Fixed-window schedule for Anthropic summarization. Feed tweets are refreshed
+# every 15 min (cheap RapidAPI), but the expensive LLM summary only runs at
+# the listed KST hours — no matter how many times collect_feed fires between.
+KST = timezone(timedelta(hours=9))
+SUMMARIZE_WINDOWS_KST = (0, 12)
+_FEED_SUMMARY_FILE = Path(__file__).parent.parent / "data" / "feed_summary.json"
+
+
+def _current_window_start() -> datetime:
+    """Most recent KST summarize window that has already started at this moment."""
+    now = datetime.now(KST)
+    for h in sorted(SUMMARIZE_WINDOWS_KST, reverse=True):
+        if now.hour >= h:
+            return now.replace(hour=h, minute=0, second=0, microsecond=0)
+    # Before the earliest window today → use yesterday's last window
+    yest = now - timedelta(days=1)
+    return yest.replace(hour=max(SUMMARIZE_WINDOWS_KST), minute=0, second=0, microsecond=0)
+
+
+def _load_feed_summary() -> tuple[dict[str, str], datetime | None]:
+    """언어별 요약 dict와 생성 시각을 반환. 구 스키마(`summary` 단일 필드)는 ko로 승격."""
+    if not _FEED_SUMMARY_FILE.exists():
+        return {}, None
+    try:
+        d = json.loads(_FEED_SUMMARY_FILE.read_text())
+        ts = datetime.fromisoformat(d["ts"]) if d.get("ts") else None
+        if isinstance(d.get("summaries"), dict):
+            return d["summaries"], ts
+        if d.get("summary"):
+            return {"ko": d["summary"]}, ts
+        return {}, ts
+    except Exception as e:
+        logger.warning(f"feed_summary load failed: {e}")
+        return {}, None
+
+
+def _save_feed_summary(summaries: dict[str, str], ts: datetime) -> None:
+    _FEED_SUMMARY_FILE.parent.mkdir(exist_ok=True)
+    _FEED_SUMMARY_FILE.write_text(
+        json.dumps({"summaries": summaries, "ts": ts.isoformat()}, ensure_ascii=False)
+    )
+
+
+_BULLET_CHARS = "·・•"
+
+
+def _normalize_bullets(text: str, lang: str) -> str:
+    """프론트 `split("·")`에 맞춰 요약 텍스트를 정규화.
+
+    - 줄 시작 불릿은 무조건 ASCII `·`로 통일 (DeepL이 ja에서 `・`로 바꾸는 이슈 상쇄)
+    - ko는 줄 안쪽 `·`를 `, `로 치환 (LLM이 중점을 구분자로 쓴 자리 — 본문 과쪼개짐 방지)
+    - ja/zh/en의 줄 안쪽 `・`/`·`는 보존 (고유명사 구분 역할 유지)
+    """
+    if not text:
+        return text
+    out = []
+    for line in text.split("\n"):
+        stripped = line.lstrip()
+        if stripped and stripped[0] in _BULLET_CHARS:
+            body = stripped[1:].lstrip()
+            if lang == "ko":
+                body = body.replace("·", ", ")
+            out.append(f"· {body}")
+        else:
+            out.append(line)
+    return "\n".join(out)
+
 # CantonScan API
 CANTONSCAN_API_BASE = "https://fossil-outlook-levitate-gloomy.cantonscan.com"
 TIMESERIES_URL = f"{CANTONSCAN_API_BASE}/api/mining-rounds/timeseries?interval=day"
+
+# KPI history — daily KPI snapshots persisted to drive sparklines.
+# Ring buffer of last ~60 days; deduplicated per ISO date.
+_KPI_HISTORY_FILE = Path(__file__).parent.parent / "data" / "kpi_history.json"
+_KPI_HISTORY_MAX = 60
+
+
+def _load_kpi_history() -> list[dict]:
+    if not _KPI_HISTORY_FILE.exists():
+        return []
+    try:
+        data = json.loads(_KPI_HISTORY_FILE.read_text())
+        if isinstance(data, list):
+            return data
+    except Exception as e:
+        logger.warning(f"KPI history read failed: {e}")
+    return []
+
+
+def _append_kpi_history(entry: dict) -> None:
+    """Append a KPI snapshot, deduplicating by UTC date (one entry per day).
+
+    Called from collect_network after each successful collection — the dedup
+    keeps the file from ballooning while capturing daily state.
+    """
+    history = _load_kpi_history()
+    entry_date = entry["ts"][:10]
+    history = [e for e in history if e.get("ts", "")[:10] != entry_date]
+    history.append(entry)
+    history = history[-_KPI_HISTORY_MAX:]
+    _KPI_HISTORY_FILE.parent.mkdir(exist_ok=True)
+    _KPI_HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False))
+
+
+# Stopwords for trending keyword extraction. Intentionally small — signal
+# comes from low-frequency domain terms; big stopword lists strip them.
+_TRENDING_STOPWORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "and", "or", "but", "if", "then", "else", "for", "to", "of", "in",
+    "on", "at", "by", "with", "from", "as", "this", "that", "these", "those",
+    "it", "its", "we", "you", "your", "our", "us", "they", "them", "their",
+    "he", "she", "his", "her", "i", "me", "my", "do", "does", "did", "have",
+    "has", "had", "will", "would", "can", "could", "should", "may", "might",
+    "just", "now", "new", "more", "most", "via", "per", "all", "any",
+    "rt", "amp", "http", "https", "com", "www",
+}
 
 
 async def collect_realtime_prices(cache: TTLCache):
@@ -198,6 +314,15 @@ async def collect_network(cache: TTLCache):
             from collectors.cantonscan_scraper import load_cached_homepage_data
             homepage = load_cached_homepage_data()
 
+            # Count super validators + total validator nodes from holders cache.
+            # Falls back to homepage scrape values, then to known defaults only as last resort.
+            holders_data = cache.get("analytics:holders") or {}
+            holder_list = holders_data.get("holders", [])
+            sv_count = sum(1 for h in holder_list if h.get("category") == "super_validator")
+            validator_count = sum(1 for h in holder_list if h.get("category") in ("super_validator", "validator"))
+            super_validators = sv_count if sv_count > 0 else homepage.get("super_validators") or 45
+            validator_nodes = validator_count if validator_count > 0 else homepage.get("validator_nodes") or 866
+
             cache.set("network", {
                 "bm_ratio": round(bm, 4),
                 "bm_status": "deflationary" if bm >= 1 else "inflationary",
@@ -213,15 +338,28 @@ async def collect_network(cache: TTLCache):
             }, ttl=300)
             cache.set("network_status", {
                 "total_supply": data.total_supply or data.cumulative_mint,
-                "super_validators": 45,
-                "validator_nodes": 866,
+                "super_validators": super_validators,
+                "validator_nodes": validator_nodes,
                 "total_transfers_24h": homepage.get("total_transfers_24h", data.daily_transactions),
                 "cumulative_burned": data.cumulative_burn,
                 "cumulative_burn_rate": round(
                     (data.cumulative_burn / data.cumulative_mint * 100) if data.cumulative_mint and data.cumulative_burn else 0, 2
                 ),
             }, ttl=3600)
-            logger.info(f"Network cached: B/M={bm:.4f}")
+
+            # Append KPI snapshot to history file (drives sparklines)
+            try:
+                _append_kpi_history({
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "active_addresses_24h": homepage.get("active_addresses_24h", data.daily_active_addresses),
+                    "total_transfers_24h": homepage.get("total_transfers_24h", data.daily_transactions),
+                    "private_tx_ratio": homepage.get("private_tx_ratio"),
+                    "super_validators": super_validators,
+                })
+            except Exception as e:
+                logger.warning(f"KPI history append failed: {e}")
+
+            logger.info(f"Network cached: B/M={bm:.4f}, SV={super_validators}, Val={validator_nodes}")
     except Exception as e:
         logger.error(f"Network collection failed: {e}")
     finally:
@@ -404,24 +542,66 @@ async def collect_charts(cache: TTLCache):
 
 
 async def collect_feed(cache: TTLCache):
+    """Twitter fetch every 15 min; AI summarize only at SUMMARIZE_WINDOWS_KST.
+
+    Cost guard: Anthropic Messages API (Sonnet 4.6) costs ~$0.01 per call. The
+    feed loop fires every 15 min for fresh "time_ago" labels — but calling the
+    LLM 96× a day wasted ~95% of spend on identical tweet sets. Now we only
+    summarize when the current KST window advances (00:00 or 12:00 KST), and
+    the last summary is persisted to disk so process restarts don't re-trigger.
+    """
     from collectors import TwitterCollector
     collector = TwitterCollector()
     try:
         tweets = await collector.collect_all()
         if not tweets:
             return
-        from tweet_summarizer import summarize_tweets
-        raw_summary = await summarize_tweets(tweets)
-        # 텔레그램 HTML 태그를 웹용으로 변환
-        en_summary = _convert_telegram_html(raw_summary)
+
+        window = _current_window_start()
+        summaries, cached_ts = _load_feed_summary()
+        summaries = {lang: _normalize_bullets(s, lang) for lang, s in summaries.items()}
+
+        needs_ko_refresh = not summaries.get("ko") or cached_ts is None or cached_ts < window
+        if needs_ko_refresh:
+            from tweet_summarizer import summarize_tweets
+            ko_summary = _normalize_bullets(await summarize_tweets(tweets), "ko")
+            summaries = {"ko": ko_summary}
+            cached_ts = datetime.now(KST)
+            logger.info(
+                f"Feed summary (ko) refreshed for window {window.isoformat()} ({len(ko_summary)} chars)"
+            )
+        else:
+            logger.info(
+                f"Feed summary (ko) cache hit (window={window.isoformat()}, cached_at={cached_ts.isoformat()}) — Anthropic call skipped"
+            )
+
+        # 누락된 언어만 증분 번역 (deploy 직후 구 스키마 파일에도 자연스럽게 en/ja/zh가 채워짐)
+        missing = [lang for lang in ("en", "ja", "zh") if not summaries.get(lang)]
+        if missing and summaries.get("ko"):
+            from api.translator import translate_ko
+            results = await asyncio.gather(
+                *(translate_ko(summaries["ko"], lang) for lang in missing),
+                return_exceptions=True,
+            )
+            for lang, result in zip(missing, results):
+                raw = result if isinstance(result, str) and result else summaries["ko"]
+                summaries[lang] = _normalize_bullets(raw, lang)
+            logger.info(f"Feed summary translated via DeepL: {missing}")
+            _save_feed_summary(summaries, cached_ts)
+        elif needs_ko_refresh:
+            _save_feed_summary(summaries, cached_ts)
+
+        web_summaries = {lang: _convert_telegram_html(s) for lang, s in summaries.items()}
+
         all_tweets = []
         for account, tw_list in tweets.items():
             for tw in sorted(tw_list, key=lambda t: t.created_at, reverse=True)[:5]:
                 all_tweets.append({"source": f"@{tw.username}", "time_ago": _relative_time(tw.created_at), "text": tw.text, "url": tw.url})
-        cache.set("feed:en", {"lang": "en", "items": all_tweets[:5], "ai_summary": en_summary}, ttl=900)
-        for lang in ("ko", "ja", "zh"):
-            cache.set(f"feed:{lang}", {"lang": lang, "items": all_tweets[:5], "ai_summary": en_summary}, ttl=900)
-        logger.info(f"Feed cached: {len(all_tweets)} tweets")
+        # Feed cache TTL stays 15min so "time_ago" labels stay fresh even between summarize windows.
+        for lang in ("ko", "en", "ja", "zh"):
+            summary = web_summaries.get(lang) or web_summaries.get("ko", "")
+            cache.set(f"feed:{lang}", {"lang": lang, "items": all_tweets[:5], "ai_summary": summary}, ttl=900)
+        logger.info(f"Feed cached: {len(all_tweets)} tweets, langs={list(web_summaries.keys())}")
     except Exception as e:
         logger.error(f"Feed collection failed: {e}")
 
@@ -552,6 +732,52 @@ async def collect_holders(cache: TTLCache):
             logger.info(f"Holders loaded from file cache: {len(cached)}")
 
 
+async def collect_trending(cache: TTLCache):
+    """Aggregate top trending keywords from cached Canton tweets.
+
+    Pulls from the English feed (most content) and falls back across languages.
+    Emits a list of {keyword, count, last_seen} sorted by frequency. Runs after
+    collect_feed so it consumes the latest tweets.
+    """
+    import re
+
+    feed = cache.get("feed:en") or cache.get("feed:ko") or {}
+    items = feed.get("items", [])
+    if not items:
+        cache.set("analytics:trending", {"keywords": [], "fetched_at": None}, ttl=3600)
+        return
+
+    counter: Counter[str] = Counter()
+    last_seen: dict[str, str] = {}
+    for it in items:
+        text = (it.get("text") or "").lower()
+        time_ago = it.get("time_ago", "")
+        # Extract cashtags, hashtags, and meaningful words (len >= 4)
+        tokens = re.findall(r"[#$]?[a-z][a-z0-9_]{3,}", text)
+        for tok in tokens:
+            if tok.startswith("#") or tok.startswith("$"):
+                kw = tok
+            else:
+                if tok in _TRENDING_STOPWORDS:
+                    continue
+                if tok.isdigit():
+                    continue
+                kw = tok
+            counter[kw] += 1
+            last_seen.setdefault(kw, time_ago)
+
+    top = counter.most_common(10)
+    keywords = [
+        {"keyword": kw, "count": count, "last_seen": last_seen.get(kw, "")}
+        for kw, count in top
+    ]
+    cache.set("analytics:trending", {
+        "keywords": keywords,
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+    }, ttl=3600)
+    logger.info(f"Trending cached: {len(keywords)} keywords, top={top[0][0] if top else 'none'}")
+
+
 async def collect_homepage(cache: TTLCache):
     """CantonScan 홈페이지 스크래핑 (하루 1회). 완료 후 network 데이터 갱신."""
     try:
@@ -597,6 +823,11 @@ async def _deferred_initial(cache: TTLCache):
         collect_kr_companies(cache),
         return_exceptions=True,
     )
+    # Trending runs after feed to consume latest tweets
+    try:
+        await collect_trending(cache)
+    except Exception as e:
+        logger.error(f"Trending collection failed: {e}")
     logger.info("Deferred collection complete")
 
 
@@ -614,6 +845,7 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_network, cache, 300, "network"))
     asyncio.create_task(_loop(collect_charts, cache, 900, "charts"))
     asyncio.create_task(_loop(collect_feed, cache, 900, "feed"))
+    asyncio.create_task(_loop(collect_trending, cache, 900, "trending"))
     asyncio.create_task(_loop(collect_governance, cache, 3600, "governance"))
     asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))
     asyncio.create_task(_loop(collect_exchanges, cache, 900, "exchanges"))  # 15분
