@@ -1,4 +1,7 @@
 """Analytics endpoints — reward split, amulet price, cumulative metrics."""
+import json
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.cache import TTLCache
@@ -7,6 +10,8 @@ from api.dependencies import get_cache
 router = APIRouter(prefix="/api/analytics")
 
 VALID_PERIODS = {"7d", "1m", "3m"}
+
+_KPI_HISTORY_FILE = Path(__file__).parent.parent.parent / "data" / "kpi_history.json"
 
 
 def _empty(period: str) -> list:
@@ -77,6 +82,30 @@ async def burn_breakdown(cache: TTLCache = Depends(get_cache)):
         "burned_from_fees": None,
         "burned_from_traffic": None,
     }
+
+
+@router.get("/trending")
+async def trending(cache: TTLCache = Depends(get_cache)):
+    """캔톤 관련 트렌딩 키워드 — 최근 수집된 트윗에서 추출."""
+    return cache.get("analytics:trending") or {"keywords": [], "fetched_at": None}
+
+
+@router.get("/kpi-history")
+async def kpi_history():
+    """KPI 스냅샷 이력 — 일별 active_addresses / transfers / private_ratio / SV 수.
+
+    Canton Hub 자체 누적 (CantonScan 홈페이지 스냅샷 매일 저장). 데이터가 모이기
+    전에는 짧은 배열이 반환됨.
+    """
+    if not _KPI_HISTORY_FILE.exists():
+        return {"entries": []}
+    try:
+        data = json.loads(_KPI_HISTORY_FILE.read_text())
+        if not isinstance(data, list):
+            return {"entries": []}
+        return {"entries": data}
+    except Exception:
+        return {"entries": []}
 
 
 # Realtime source → CoinGecko scraper exchange name mapping for depth enrichment
