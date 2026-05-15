@@ -36,6 +36,51 @@
 
 ---
 
+## Task 0: 테스트 도구 설치 (사전 작업)
+
+**문제:** `pytest`/`pytest-asyncio`가 venv에 없고 `requirements.txt`에도 없다 (`./venv/bin/python -m pytest` → `No module named pytest`). 기존 `tests/api/*.py`조차 현재 환경에서 실행 불가. Task 1의 첫 "fail 확인" 스텝부터 도구 에러로 막히므로 먼저 해결한다. prod 배포(`requirements.txt`)에는 테스트 의존성을 넣지 않고 별도 `requirements-dev.txt`로 분리한다.
+
+**Files:**
+- Create: `requirements-dev.txt`
+- Create: `pytest.ini`
+
+- [ ] **Step 1: `requirements-dev.txt` 생성**
+
+```
+# 개발/테스트 전용 — prod(requirements.txt)에 섞지 않음
+-r requirements.txt
+pytest>=8.0
+pytest-asyncio>=0.23
+```
+
+- [ ] **Step 2: `pytest.ini` 생성** — 기존 테스트가 `@pytest.mark.asyncio` 마커 방식이므로 strict 모드
+
+```ini
+[pytest]
+asyncio_mode = strict
+testpaths = tests
+```
+
+- [ ] **Step 3: venv에 설치**
+
+Run: `cd /Users/choejaewon/project/Ozzycanton/canton-hub && ./venv/bin/python -m pip install -r requirements-dev.txt`
+Expected: `Successfully installed ... pytest-8.x pytest-asyncio-0.x`
+
+- [ ] **Step 4: 기존 테스트로 도구 동작 검증** (우리 코드 아직 0줄 — 순수 툴체인 확인)
+
+Run: `./venv/bin/python -m pytest tests/api/test_cache.py -v`
+Expected: PASS (기존 `test_cache.py` 통과 — pytest+asyncio 정상 동작 증명)
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /Users/choejaewon/project/Ozzycanton/canton-hub
+git add requirements-dev.txt pytest.ini
+git commit -m "test: pytest + pytest-asyncio 개발 의존성 분리 (requirements-dev.txt)"
+```
+
+---
+
 ## Task 1: `FundingRate` dataclass + APR 정규화
 
 **Files:**
@@ -592,38 +637,59 @@ Expected: PASS (전체 ~15 passed)
 
 ## Task 7: Scheduler 60초 tick 등록 + 백엔드 smoke
 
+**Context — 실제 scheduler 패턴 (검증 완료):** `api/scheduler.py`는 APScheduler를 쓰지 **않는다**. 직접 만든 asyncio 루프 패턴이다:
+- 각 수집기: `async def collect_X(cache: TTLCache):` — cache를 **파라미터로 주입**받음 (모듈 레벨 `_cache` 없음)
+- `async def _loop(fn, cache, interval, name):` (line ~815) — `while True: await asyncio.sleep(interval); await fn(cache)`
+- `async def start_scheduler(cache):` (line ~846) 안에서:
+  - `asyncio.create_task(_loop(collect_X, cache, interval, "name"))` (line ~856–866 블록)
+  - 즉시 1회 실행 `asyncio.create_task(collect_realtime_prices(cache))` (line ~869)
+
+→ `scheduler.add_job` / `_cache` 같은 심볼은 **존재하지 않는다**. 아래 패턴을 그대로 따른다.
+
 **Files:**
-- Modify: `api/scheduler.py` (기존 `collect_*` 함수 + `add_job` 패턴 확인: `grep -n "add_job\|async def collect_" api/scheduler.py`)
+- Modify: `api/scheduler.py`
 
-- [ ] **Step 1: 기존 패턴 확인**
+- [ ] **Step 1: 기존 패턴 위치 재확인**
 
-Run: `grep -n "add_job\|realtime_prices\|async def collect_" api/scheduler.py`
-→ 기존 `collect_realtime_prices` job이 어떻게 등록됐는지 확인 (interval trigger, cache.set 키)
+Run: `grep -n "_loop\|async def collect_realtime_prices\|async def start_scheduler\|create_task(_loop(collect_realtime_prices\|create_task(collect_realtime_prices" api/scheduler.py`
+→ `collect_realtime_prices` 함수 정의 / `_loop` 등록 줄 / 즉시 실행 줄의 정확한 라인 확인
 
-- [ ] **Step 2: Implement** — `api/scheduler.py`에 collect 함수 + job 추가 (기존 realtime_prices job과 동일 구조, interval만 60s)
+- [ ] **Step 2: Implement — collect 함수 추가** (다른 `collect_*` 정의들 근처, 예: `collect_realtime_prices` 아래)
 
 ```python
-# import 추가
+# 파일 상단 import 그룹에 추가 (기존 collectors import 옆)
 from collectors.funding_rates import collect_all_funding_rates
 from dataclasses import asdict
 from datetime import datetime, timezone
+```
 
-# collect 함수 (기존 collect_realtime_prices 패턴 따름)
-async def collect_funding_rates_job():
+```python
+# collect_realtime_prices 정의 근처에 추가 — cache 파라미터 DI (기존 패턴 동일)
+async def collect_funding_rates(cache: TTLCache):
     rates = await collect_all_funding_rates()
-    if rates:  # 전부 실패 시 직전 캐시 유지
-        _cache.set("analytics:funding-rates", {
+    if rates:  # 전부 실패 시 직전 캐시 유지 (갱신 안 함)
+        cache.set("analytics:funding-rates", {
             "rates": [asdict(r) for r in rates],
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }, ttl=90)
         logger.info(f"cached: funding-rates ({len(rates)}/7 거래소)")
-
-# scheduler 등록부 (기존 add_job 모음 근처)
-scheduler.add_job(collect_funding_rates_job, "interval", seconds=60,
-                  id="funding_rates", next_run_time=datetime.now(timezone.utc))
 ```
 
-⚠️ `_cache` / `scheduler` / `logger` 심볼명은 Step 1에서 확인한 기존 코드의 실제 이름에 맞춘다.
+- [ ] **Step 3: Implement — start_scheduler에 등록 2줄 추가**
+
+`start_scheduler(cache)` 안, `_loop(collect_realtime_prices, ...)` 줄 바로 아래에:
+
+```python
+    asyncio.create_task(_loop(collect_funding_rates, cache, 60, "funding-rates"))  # 60초
+```
+
+그리고 즉시 1회 실행 `asyncio.create_task(collect_realtime_prices(cache))` 줄 바로 아래에:
+
+```python
+    asyncio.create_task(collect_funding_rates(cache))
+```
+
+⚠️ `logger`는 기존 모듈에 `logging.getLogger(__name__)`로 존재함 (그대로 사용). `cache`는 `start_scheduler`/`_loop`가 넘겨주는 파라미터를 그대로 받는다 — 모듈 전역 참조 금지.
 
 - [ ] **Step 3: 백엔드 재기동 + smoke**
 
