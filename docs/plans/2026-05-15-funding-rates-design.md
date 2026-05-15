@@ -194,39 +194,77 @@ def to_apr(fr_raw: float, period_hours: int) -> float:
 
 ### 4.3 컴포넌트 구조 (단일 파일)
 
+⚠️ **`web/CLAUDE.md` §0 규칙 — API 호출은 반드시 `lib/api.ts` SWR 훅 경유. `fetch` 직접 호출 금지.**
+
+먼저 `web/lib/`에 hook + type을 추가:
+
 ```typescript
-// web/components/FundingRateMatrix.tsx
-export function FundingRateMatrix() {
-  const { data, error } = useSWR('/api/analytics/funding-rates', fetcher, {
-    refreshInterval: 30000,
-    fallbackData: { rates: [], updated_at: null },
-  });
-  const { data: prices } = useSWR('/api/analytics/realtime-prices', fetcher, ...);
+// web/lib/types.ts (추가)
+export interface FundingRate {
+  source: string;                    // "Hyperliquid", "Bybit Perp" 등
+  venue_type: "DEX" | "CEX";
+  market: "perpetual";
+  pair: string;                      // "CC/USD", "CC/USDT"
+  fr_raw: number;                    // 0.00012 = 0.012%
+  period_hours: 1 | 8;
+  fr_apr: number;                    // 연환산 % (백엔드에서 미리 계산)
+  next_funding_ts: number;           // unix epoch seconds
+  api_source: string;
+}
+
+export interface FundingRates {
+  rates: FundingRate[];
+  updated_at: string | null;         // ISO8601
+}
+
+// web/lib/api.ts (추가)
+export function useFundingRates() {
+  return useSWR<FundingRates>(
+    `${API_BASE}/api/analytics/funding-rates`,
+    fetcher,
+    { refreshInterval: 30_000, fallbackData: { rates: [], updated_at: null } }
+  );
+}
+```
+
+그 다음 컴포넌트:
+
+```typescript
+// web/components/analytics/FundingRateMatrix.tsx
+"use client";
+import { Card, Title, Grid, Metric, Table, BadgeDelta, Callout } from "@tremor/react";
+import { useFundingRates, useRealtimePrices } from "@/lib/api";
+
+export default function FundingRateMatrix() {
+  const { data: fr, error } = useFundingRates();
+  const { data: rt } = useRealtimePrices();
 
   const recommendations = useMemo(
-    () => computePairs(data?.rates ?? [], prices?.live_prices ?? []),
-    [data, prices]
+    () => computePairs(fr?.rates ?? [], rt?.prices ?? []),  // ← rt.prices (live_prices 아님)
+    [fr, rt]
   );
 
-  if (error) return <ErrorBanner />;
-  if (!data?.rates.length) return <EmptyState />;
+  if (error) return <Callout color="rose" title="펀비 데이터 로드 실패" />;
+  if (!fr?.rates.length) return <Callout color="gray" title="데이터 수집 중..." />;
 
   return (
     <Card>
       <Title>펀비 양빵 매트릭스</Title>
       <RecommendationCards pairs={recommendations} />
-      <FundingRateTable rates={data.rates} />
-      <LastUpdated ts={data.updated_at} />
+      <FundingRateTable rates={fr.rates} prices={rt?.prices ?? []} />
+      <LastUpdated ts={fr.updated_at} />
     </Card>
   );
 }
 
 function RecommendationCards({ pairs }: ...) { ... }
-function FundingRateTable({ rates }: ...) { ... }
+function FundingRateTable({ rates, prices }: ...) { ... }  // prices는 trade_url 매핑용
 function Countdown({ targetTs }: { targetTs: number }) {
   // setInterval 1초. targetTs - now < 0이면 "정산 중..." 표시.
 }
 ```
+
+**trade_url 처리**: `FundingRate` dataclass에 별도로 넣지 않고, 클라이언트에서 `rt.prices`의 동일 `source` entry에서 `trade_url` join (기존 `_enrich_with_depth` 패턴과 동일 접근).
 
 ### 4.4 페어 계산 로직 (클라이언트)
 
@@ -239,6 +277,7 @@ type Pair = {
   liquidity_min_usd: number;  // min(short depth_-2%, long depth_+2%)
 };
 
+// prices: rt.prices (RealtimePrices.prices, 즉 LivePrice[])
 function computePairs(rates: FundingRate[], prices: LivePrice[]): {perpPair: Pair | null, spotPerpPair: Pair | null} {
   const sorted = [...rates].sort((a, b) => b.fr_apr - a.fr_apr);
 
@@ -322,7 +361,7 @@ if results:  # 전부 실패하면 캐시 갱신 안 함 → 직전 데이터 �
 
 ## 6. Testing
 
-기존 `canton-hub/tests/` 패턴 (`pytest` + `httpx-respx` 또는 `pytest-httpx` mock).
+기존 `canton-hub/tests/api/` 패턴 — 실제 mocking 라이브러리는 implementation plan 첫 단계에서 `tests/` 디렉토리 확인 후 확정 (`pytest-httpx` / `httpx-respx` / `unittest.mock` 중 기존 코드가 쓰는 것).
 
 ### 6.1 백엔드 테스트
 
@@ -361,10 +400,13 @@ tests/
 | 변경 영역 | 영향 | 완화 |
 |---|---|---|
 | `api/scheduler.py` | fetch task 1개 추가 → 60초마다 7개 HTTP 요청 | 거래소별 rate limit 안전 (대부분 100+ req/sec 허용, 우리는 1/min) |
-| `cache.py` | 신규 키 1개 (`analytics:funding-rates`) | TTL 90초로 메모리 부담 미미 |
+| `api/cache.py` | 신규 키 1개 (`analytics:funding-rates`) | TTL 90초로 메모리 부담 미미 |
 | `requirements.txt` | 변경 없음 (`httpx`, `apscheduler` 기존 의존성으로 충분) | — |
+| `web/lib/types.ts` | `FundingRate`, `FundingRates` 타입 2개 추가 | 기존 타입과 충돌 없음 |
+| `web/lib/api.ts` | `useFundingRates` SWR 훅 추가 (web §0 규칙) | 기존 훅 영향 없음 |
 | `web/` 의존성 | Tremor 기존 사용 (`@tremor/react`) | 추가 패키지 없음 |
-| 기존 `/api/analytics/realtime-prices` | 변경 없음 (펀비 컴포넌트가 추가 fetch만 함) | — |
+| 기존 `/api/analytics/realtime-prices` | 응답 변경 없음 (컴포넌트가 trade_url 매핑용으로 read-only 활용) | — |
+| `docs/ARCHITECTURE.md` | Cache Key Map + SWR Hook Map 항목 추가 필요 (canton-hub §9 Doc Rules) | implementation plan에 step으로 포함 |
 
 ---
 
