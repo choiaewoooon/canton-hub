@@ -22,6 +22,7 @@ Canton Hub 실시간 아비트라지 트래커 페이지는 현재 10개 거래�
    - **현물 ↔ Perp**: 가장 싼 현물 매수 + FR 양수 Perp 숏 → 베이시스 + FR 수익
 3. **다음 정산까지 카운트다운**: 클라이언트 1초 단위
 4. **1h 정산(HL/Extended/Lighter) ↔ 8h 정산(Aster/Binance/Bybit/OKX) 혼재**를 APR로 정규화하여 동일 척도 비교
+5. **다국어 지원**: 기존 `useLang()` 패턴 따름. `lang === "ko"`면 한국어, 그 외(`en` / `ja` / `zh`)는 **영어 fallback**. 자세한 매핑은 §10 참조.
 
 ### 1.3 페어 추천 알고리즘 — Raw FR APR 차이 (단순 정렬)
 
@@ -234,8 +235,12 @@ export function useFundingRates() {
 "use client";
 import { Card, Title, Grid, Metric, Table, BadgeDelta, Callout } from "@tremor/react";
 import { useFundingRates, useRealtimePrices } from "@/lib/api";
+import { useLang } from "@/lib/use-lang";
+import { TEXTS } from "./funding-rate-matrix.i18n";   // §10 참조
 
 export default function FundingRateMatrix() {
+  const [lang] = useLang();
+  const t = (key: keyof typeof TEXTS) => lang === "ko" ? TEXTS[key].ko : TEXTS[key].en;
   const { data: fr, error } = useFundingRates();
   const { data: rt } = useRealtimePrices();
 
@@ -244,15 +249,15 @@ export default function FundingRateMatrix() {
     [fr, rt]
   );
 
-  if (error) return <Callout color="rose" title="펀비 데이터 로드 실패" />;
-  if (!fr?.rates.length) return <Callout color="gray" title="데이터 수집 중..." />;
+  if (error) return <Callout color="rose" title={t("errorLoad")} />;
+  if (!fr?.rates.length) return <Callout color="gray" title={t("loading")} />;
 
   return (
     <Card>
-      <Title>펀비 양빵 매트릭스</Title>
-      <RecommendationCards pairs={recommendations} />
-      <FundingRateTable rates={fr.rates} prices={rt?.prices ?? []} />
-      <LastUpdated ts={fr.updated_at} />
+      <Title>{t("title")}</Title>
+      <RecommendationCards pairs={recommendations} t={t} />
+      <FundingRateTable rates={fr.rates} prices={rt?.prices ?? []} t={t} />
+      <LastUpdated ts={fr.updated_at} t={t} />
     </Card>
   );
 }
@@ -420,9 +425,12 @@ tests/
    - (1-c) `api/scheduler.py` — 60초 tick
    - (1-d) 백엔드 테스트
 2. **Frontend**
-   - (2-a) `web/components/FundingRateMatrix.tsx` — 단일 컴포넌트
-   - (2-b) 기존 페이지에 placement
-   - (2-c) (있다면) 프론트엔드 테스트
+   - (2-a) `web/lib/types.ts` — `FundingRate`, `FundingRates` 타입 추가
+   - (2-b) `web/lib/api.ts` — `useFundingRates` SWR 훅 추가
+   - (2-c) `web/components/analytics/funding-rate-matrix.i18n.ts` — 다국어 텍스트 사전 (§10)
+   - (2-d) `web/components/analytics/FundingRateMatrix.tsx` — 단일 컴포넌트
+   - (2-e) 기존 페이지에 placement
+   - (2-f) (있다면) 프론트엔드 테스트
 3. **검증**
    - 7개 거래소 모두 살아있는 시간대 확인 (특히 Lighter 응답)
    - 모바일 1열 동작
@@ -437,3 +445,101 @@ tests/
 - **Aster funding 정산 주기**: Binance API 호환이라 8h로 가정하나 응답 `fundingIntervalHours` 같은 필드로 검증.
 
 이 항목들은 design 결정사항이 아니라 구현 단계에서 직접 fetch로 확인.
+
+---
+
+## 10. Internationalization (i18n)
+
+### 10.1 정책
+
+기존 `useLang()` 훅(`/web/lib/use-lang.ts`)이 4개 언어 코드(`ko` / `en` / `ja` / `zh`)를 지원하지만, 본 컴포넌트는 **2-track 정책**:
+
+- `lang === "ko"` → **한국어**
+- `lang === "en" | "ja" | "zh"` → **영어 fallback** (별도 ja/zh 번역 안 만듦)
+
+이유: ja/zh 사용자가 영어를 이해할 수 있다는 가정 + 트레이딩 용어(FR, APR, Spot, Perp)는 영어 원어가 더 정확. ja/zh 별도 번역은 미래 수요 확인 후 추가 (지금은 YAGNI).
+
+### 10.2 패턴 — 컴포넌트 dictionary 파일
+
+기존 `components/nav/navbar.tsx`의 inline 객체 매핑 패턴을 그대로 따르되, 텍스트가 많으니 **dictionary를 별도 파일로 분리**:
+
+```typescript
+// web/components/analytics/funding-rate-matrix.i18n.ts
+export const TEXTS = {
+  title:              { ko: "펀비 양빵 매트릭스",            en: "Funding Rate Arbitrage Matrix" },
+  perpPerpTitle:      { ko: "🎯 Perp-Perp 양빵",             en: "🎯 Perp-Perp Arbitrage" },
+  spotPerpTitle:      { ko: "🎯 현물-Perp 양빵",             en: "🎯 Spot-Perp Arbitrage" },
+  longLabel:          { ko: "롱",                            en: "Long" },
+  shortLabel:         { ko: "숏",                            en: "Short" },
+  spotBuyLabel:       { ko: "현물 매수",                     en: "Spot Buy" },
+  entrySpread:        { ko: "진입스프",                      en: "Entry spread" },
+  basis:              { ko: "베이시스",                      en: "Basis" },
+  orderbookDepth:     { ko: "호가창",                        en: "Order depth" },
+  colExchange:        { ko: "거래소",                        en: "Exchange" },
+  colFrRaw:           { ko: "FR(원시)",                      en: "FR (raw)" },
+  colApr:             { ko: "APR",                           en: "APR" },
+  colNextFunding:     { ko: "다음정산",                      en: "Next Funding" },
+  colTrade:           { ko: "Trade ↗",                       en: "Trade ↗" },
+  countdownSettling:  { ko: "정산 중...",                    en: "Settling..." },
+  lastUpdated:        { ko: "마지막 업데이트",               en: "Last updated" },
+  ago:                { ko: "전",                            en: "ago" },     // "12초 전" / "12s ago"
+  staleWarning:       { ko: "⚠ 데이터 갱신 지연",            en: "⚠ Data update delayed" },
+  errorLoad:          { ko: "펀비 데이터 로드 실패",         en: "Failed to load funding rate data" },
+  loading:            { ko: "데이터 수집 중...",             en: "Collecting data..." },
+  noArbitrage:        { ko: "현재 양빵 적합 페어 없음 (모든 FR 음수)", en: "No suitable arbitrage pair (all FR negative)" },
+} as const;
+
+// 컴포넌트에서 사용:
+//   const t = (key: keyof typeof TEXTS) => lang === "ko" ? TEXTS[key].ko : TEXTS[key].en;
+//   <Title>{t("title")}</Title>
+```
+
+거래소 이름(Hyperliquid, Bybit Perp 등)은 **번역 안 함** — 고유명사.
+
+### 10.3 영어 모드 mockup
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ 💰 Funding Rate Arbitrage Matrix                          │
+│                                                            │
+│ ┌──────────────────┬──────────────────────────────────┐  │
+│ │ 🎯 Perp-Perp Arb │ 🎯 Spot-Perp Arb                 │  │
+│ │ +18.3% APR       │ +13.4% APR                       │  │
+│ │ HL Long + BP Short│ Bybit Spot Buy + HL Perp Short  │  │
+│ │ ※ Entry spread   │ ※ Basis 0.02%↓                   │  │
+│ │   0.07%↑         │ ※ Order depth $128K (Bybit -2%)  │  │
+│ │ ※ Order depth $87K│                                  │  │
+│ └──────────────────┴──────────────────────────────────┘  │
+│                                                            │
+│ Exchange       FR (raw)   APR     Next Funding   Trade ↗ │
+│ Lighter        +0.032%/1h +28.0%   18m            →       │
+│ Hyperliquid    +0.012%/1h +10.5%   43m            →       │
+│ OKX Perp       +0.008%/8h +8.8%    5h 21m         →       │
+│ Aster          +0.001%/8h +1.1%    3h 21m         →       │
+│ Extended       -0.001%/1h -0.9%    43m            →       │
+│ Binance Perp   -0.020%/8h -2.2%    5h 21m         →       │
+│ Bybit Perp     -0.045%/8h -4.9%    5h 21m         →       │
+│                                                            │
+│ Last updated: 18:42:15 (12s ago)                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 10.4 시간 단위 표기
+
+| 한국어 | 영어 |
+|---|---|
+| `43분` | `43m` |
+| `5시간 21분` (모바일: `5시간`) | `5h 21m` (모바일: `5h`) |
+| `12초 전` | `12s ago` |
+| `3분 전` | `3m ago` |
+
+→ 별도 helper `formatDuration(seconds, lang)` 함수로 추출 권장. `web/lib/format.ts`에 추가.
+
+### 10.5 테스트
+
+- `test_funding_rate_matrix_renders_ko`: `useLang() = ["ko", ...]` → "펀비 양빵 매트릭스" 노출
+- `test_funding_rate_matrix_renders_en`: `useLang() = ["en", ...]` → "Funding Rate Arbitrage Matrix" 노출
+- `test_funding_rate_matrix_renders_zh_fallbacks_to_en`: `useLang() = ["zh", ...]` → "Funding Rate Arbitrage Matrix" 노출 (영어 fallback 검증)
+- `test_funding_rate_matrix_renders_ja_fallbacks_to_en`: 동일 (ja → en)
+
+(web/ 테스트 셋업 존재 여부에 따라 구현 단계에서 결정.)
