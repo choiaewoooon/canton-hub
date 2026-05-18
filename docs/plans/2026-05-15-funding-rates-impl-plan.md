@@ -68,8 +68,8 @@ Expected: `Successfully installed ... pytest-8.x pytest-asyncio-0.x`
 
 - [ ] **Step 4: 기존 테스트로 도구 동작 검증** (우리 코드 아직 0줄 — 순수 툴체인 확인)
 
-Run: `./venv/bin/python -m pytest tests/api/test_cache.py -v`
-Expected: PASS (기존 `test_cache.py` 통과 — pytest+asyncio 정상 동작 증명)
+Run: `./venv/bin/python -m pytest tests/api/test_cache.py tests/api/test_price.py -v`
+Expected: PASS — `test_cache.py`(sync)로 pytest 자체, `test_price.py`(`@pytest.mark.asyncio`)로 pytest-asyncio + `asyncio_mode=strict`가 정상 resolve 되는지 함께 증명 (pytest.ini 오설정을 여기서 조기 발견)
 
 - [ ] **Step 5: Commit**
 
@@ -854,6 +854,8 @@ Expected: exit 0
 **Files:** Create `web/components/analytics/funding-rate-matrix.tsx`
 
 **Context:** `lang`을 prop으로 받는다 (기존 `arbitrage-tracker.tsx`가 `lang` prop 받는 패턴과 동일). spec §4.3/§4.4 컴포넌트 + computePairs 로직. Tremor 컴포넌트는 기존 analytics 컴포넌트(`grep -rn "@tremor/react" web/components/analytics/exchanges-section.tsx`)에서 실제 import 형태 확인.
+
+> ⚠️ **의도된 spec 일탈**: spec §4.3 코드 스니펫은 컴포넌트 내부에서 `useLang()`을 직접 호출하지만, 실제 페이지(`page.tsx`)가 `useLang()`을 소유하고 모든 섹션에 `lang`을 prop으로 내려주는 구조다 (`arbitrage-tracker.tsx`와 동일). 따라서 **`lang` prop 방식이 맞다 — spec의 `useLang()` 스니펫으로 "되돌리지" 말 것.** `const t = makeT(lang)`로 i18n 헬퍼 생성.
 
 - [ ] **Step 1: 기존 Tremor 사용 패턴 확인**
 
