@@ -145,8 +145,8 @@ def to_apr(fr_raw: float, period_hours: int) -> float:
 ```
 
 검증 예:
-- HL `fr_raw=0.00012` (1h) → `0.00012 × 8760 × 100 = 10.51%` APR
-- Bybit `fr_raw=-0.00045` (8h) → `-0.00045 × 1095 × 100 = -4.93%` APR
+- HL `fr_raw=0.00012` (1h) → `0.00012 × 8760 × 100 = 105.12%` APR
+- Bybit `fr_raw=-0.00045` (8h) → `-0.00045 × 1095 × 100 = -49.275%` APR
 
 ---
 
@@ -383,7 +383,7 @@ tests/
 | `test_<exchange>_parse_funding` × 7 | mock 응답 → `FundingRate` dataclass 정확 채워짐 |
 | `test_<exchange>_timeout_returns_none` | 타임아웃 → None 반환 (예외 미발생) |
 | `test_<exchange>_malformed_response` | 비어있거나 schema 어긋난 응답 → None |
-| `test_apr_1h_normalize` | `0.00012 × 8760 × 100 = 10.512` |
+| `test_apr_1h_normalize` | `0.00012 × 8760 × 100 = 105.12` |
 | `test_apr_8h_normalize` | `0.00045 × 1095 × 100 = 49.275`  |
 | `test_apr_negative` | 음수 FR도 부호 유지 |
 | `test_route_returns_cached` | cache hit 시 거래소 API 호출 안 됨 |
