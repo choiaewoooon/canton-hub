@@ -19,3 +19,6 @@ docs/superpowers/
 
 # File cache (backed by Fly.io canton_data volume mount, not needed in git)
 data/*.json
+
+# worktrees (superpowers isolated workspaces)
+.worktrees/
