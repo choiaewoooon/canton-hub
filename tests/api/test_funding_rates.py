@@ -139,3 +139,26 @@ async def test_fetch_okx_funding_parses():
     fr = await fetch_okx_funding(_FakeClient(payload))
     assert fr.source == "OKX Perp"
     assert fr.period_hours == 8
+
+
+@pytest.mark.asyncio
+async def test_collect_all_skips_failures(monkeypatch):
+    import collectors.funding_rates as m
+
+    async def ok(client):
+        return FundingRate("X", "DEX", "perpetual", "CC/USD",
+                            0.0001, 1, to_apr(0.0001, 1), 1747300000, "x")
+    async def fail(client):
+        return None
+
+    monkeypatch.setattr(m, "fetch_hyperliquid_funding", ok)
+    monkeypatch.setattr(m, "fetch_lighter_funding", fail)
+    monkeypatch.setattr(m, "fetch_aster_funding", fail)
+    monkeypatch.setattr(m, "fetch_extended_funding", fail)
+    monkeypatch.setattr(m, "fetch_binance_funding", ok)
+    monkeypatch.setattr(m, "fetch_bybit_funding", fail)
+    monkeypatch.setattr(m, "fetch_okx_funding", fail)
+
+    rates = await m.collect_all_funding_rates()
+    assert len(rates) == 2
+    assert all(isinstance(r, FundingRate) for r in rates)

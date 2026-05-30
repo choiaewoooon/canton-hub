@@ -181,3 +181,24 @@ async def fetch_okx_funding(client) -> FundingRate | None:
         except Exception as e:
             logger.warning(f"OKX funding rate failed ({inst}): {e}")
     return None
+
+
+async def collect_all_funding_rates() -> list[FundingRate]:
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(
+            fetch_hyperliquid_funding(client),
+            fetch_lighter_funding(client),
+            fetch_aster_funding(client),
+            fetch_extended_funding(client),
+            fetch_binance_funding(client),
+            fetch_bybit_funding(client),
+            fetch_okx_funding(client),
+            return_exceptions=True,
+        )
+    out: list[FundingRate] = []
+    for r in results:
+        if isinstance(r, FundingRate):
+            out.append(r)
+        elif isinstance(r, Exception):
+            logger.warning(f"funding fetch raised: {r}")
+    return out
