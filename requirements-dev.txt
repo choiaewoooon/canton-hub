@@ -1,0 +1,4 @@
+# 개발/테스트 전용 — prod(requirements.txt)에 섞지 않음
+-r requirements.txt
+pytest>=8.0
+pytest-asyncio>=0.23
