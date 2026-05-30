@@ -3,6 +3,7 @@
 import Navbar from "@/components/nav/navbar";
 import Footer from "@/components/footer";
 import ArbitrageTracker from "@/components/analytics/arbitrage-tracker";
+import FundingRateMatrix from "@/components/analytics/funding-rate-matrix";
 import ExchangesSection from "@/components/analytics/exchanges-section";
 import RewardSplitChart from "@/components/analytics/reward-split-chart";
 import AmuletPriceChart from "@/components/analytics/amulet-price-chart";
@@ -24,6 +25,7 @@ export default function AnalyticsPage() {
       <Navbar lang={lang} onLangChange={setLang} connected={connected} />
       <main className="max-w-[1200px] w-full mx-auto px-6 py-5 flex-1">
         <ArbitrageTracker lang={lang} />
+        <FundingRateMatrix lang={lang} />
         <div className="mt-5">
           <ExchangesSection lang={lang} />
         </div>
