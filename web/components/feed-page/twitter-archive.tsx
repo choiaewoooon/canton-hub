@@ -3,16 +3,17 @@
 import { useFeed } from "@/lib/api";
 import { relativeTime, kstTimestamp } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
+import { categoryLabel, categoryClass } from "@/components/feed/news-category";
 
 interface Props {
   lang: string;
 }
 
 const TITLE: Record<string, string> = {
-  ko: "Canton 트위터 아카이브",
-  en: "Canton Twitter Archive",
-  ja: "Canton ツイッターアーカイブ",
-  zh: "Canton 推特档案",
+  ko: "Canton 피드",
+  en: "Canton Feed",
+  ja: "Canton フィード",
+  zh: "Canton 动态",
 };
 
 const TRANSLATED_LABEL: Record<string, string> = {
@@ -37,10 +38,10 @@ const LOADING_LABEL: Record<string, string> = {
 };
 
 const CADENCE_LABEL: Record<string, string> = {
-  ko: "매일 0시·12시 갱신 (KST)",
-  en: "Updated daily at 00:00 · 12:00 KST",
-  ja: "毎日0時・12時更新 (KST)",
-  zh: "每日0点·12点更新 (KST)",
+  ko: "트위터 0시·12시 · 미디어 매시 갱신",
+  en: "Twitter 00:00·12:00 · Media hourly",
+  ja: "Twitter 0時・12時 · メディア毎時",
+  zh: "Twitter 0点·12点 · 媒体每小时",
 };
 
 const UPDATED_PREFIX: Record<string, string> = {
@@ -109,12 +110,20 @@ export default function TwitterArchive({ lang }: Props) {
             className="block p-3 bg-zinc-900/50 border border-canton-border rounded-md hover:border-zinc-700 transition"
           >
             <div className="flex items-center gap-2 text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">
-              <span className="text-canton-lime">{item.source}</span>
+              {item.kind === "news" && (
+                <span className={`px-1.5 py-0.5 rounded normal-case tracking-normal ${categoryClass(item.category)}`}>
+                  {categoryLabel(item.category, lang)}
+                </span>
+              )}
+              <span className="text-canton-lime normal-case tracking-normal">{item.source}</span>
               <span className="text-zinc-700 normal-case tracking-normal">·</span>
               <span className="normal-case tracking-normal" title={kstTimestamp(item.ts)}>
                 {item.ts ? relativeTime(item.ts, lang, now) : item.time_ago}
               </span>
             </div>
+            {item.kind === "news" && item.title && (
+              <p className="text-[13px] font-semibold text-zinc-100 leading-snug mb-1">{item.title}</p>
+            )}
             <p className="text-[13px] text-zinc-300 leading-relaxed whitespace-pre-line">
               {item.text}
             </p>
