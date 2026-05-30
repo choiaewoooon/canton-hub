@@ -152,6 +152,23 @@ export interface RealtimePrices {
   fetched_at: string | null;
 }
 
+export interface FundingRate {
+  source: string;
+  venue_type: "DEX" | "CEX";
+  market: "perpetual";
+  pair: string;
+  fr_raw: number;
+  period_hours: 1 | 8;
+  fr_apr: number;
+  next_funding_ts: number;
+  api_source: string;
+}
+
+export interface FundingRates {
+  rates: FundingRate[];
+  updated_at: string | null;
+}
+
 export interface DexOI {
   name: string;
   symbol: string;

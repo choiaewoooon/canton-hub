@@ -73,3 +73,20 @@ export function kstTimestamp(iso: string | undefined): string {
     }) + " KST"
   );
 }
+
+// 남은 시간(초) → "5h 21m" / "43m" / "Settling..." (lang 분기)
+export function formatDuration(seconds: number, lang: string, short = false): string {
+  if (seconds <= 0) return lang === "ko" ? "정산 중..." : "Settling...";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return short ? `${h}h` : `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+// 경과 시간(초) → "12s ago" / "12초 전"
+export function formatAgo(seconds: number, lang: string): string {
+  const ko = lang === "ko";
+  if (seconds < 60) return ko ? `${seconds}초 전` : `${seconds}s ago`;
+  const m = Math.floor(seconds / 60);
+  return ko ? `${m}분 전` : `${m}m ago`;
+}
