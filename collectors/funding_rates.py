@@ -81,3 +81,41 @@ async def fetch_lighter_funding(client: httpx.AsyncClient) -> FundingRate | None
     except Exception as e:
         logger.warning(f"Lighter funding rate failed: {e}")
     return None
+
+
+async def fetch_aster_funding(client) -> FundingRate | None:
+    try:
+        resp = await client.get(
+            "https://fapi.asterdex.com/fapi/v1/premiumIndex",
+            params={"symbol": "CCUSDT"}, timeout=5,
+        )
+        resp.raise_for_status()
+        d = resp.json()
+        fr_raw = float(d.get("lastFundingRate", 0))
+        next_ts = int(d.get("nextFundingTime", 0)) // 1000
+        return FundingRate(
+            "Aster", "DEX", "perpetual", "CC/USDT",
+            fr_raw, 8, to_apr(fr_raw, 8), next_ts, "asterdex.com",
+        )
+    except Exception as e:
+        logger.warning(f"Aster funding rate failed: {e}")
+    return None
+
+
+async def fetch_extended_funding(client) -> FundingRate | None:
+    try:
+        resp = await client.get(
+            "https://api.starknet.extended.exchange/api/v1/info/markets", timeout=5,
+        )
+        resp.raise_for_status()
+        for m in resp.json().get("data", []):
+            if m.get("name") == "CC-USD":
+                fr_raw = float(m.get("marketStats", {}).get("fundingRate", 0))
+                return FundingRate(
+                    "Extended", "DEX", "perpetual", "CC/USD",
+                    fr_raw, 1, to_apr(fr_raw, 1), _next_hourly_ts(),
+                    "extended.exchange",
+                )
+    except Exception as e:
+        logger.warning(f"Extended funding rate failed: {e}")
+    return None
