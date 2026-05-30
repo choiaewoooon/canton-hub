@@ -87,6 +87,8 @@ api/main.py
         ├── collectors/cantonscan_collector.py   ─┐
         ├── collectors/cantonscan_scraper.py     ─┼▶ CantonScan (API→HTML→Playwright)
         ├── collectors/twitter_collector.py      ─▶ RapidAPI Twitter API45
+        ├── collectors/media_collector.py        ─▶ RSS 3종 (Google News / Canton 블로그 / DA 블로그)
+        ├── news_summarizer.py                   ─▶ Anthropic Haiku (KO 요약 + 카테고리 분류)
         ├── collectors/governance_collector.py   ─▶ GitHub CIP repo
         ├── collectors/holders_collector.py      ─▶ CantonScan
         ├── collectors/kr_companies_collector.py ─▶ CantonScan party API
@@ -113,7 +115,7 @@ api/main.py
 | GET | `/api/network` | — | `network` | `{tps, validators, total_stake, block_height, ...}` |
 | GET | `/api/network/status` | — | `network_status` | `{status, latency_ms, uptime_pct, ...}` |
 | GET | `/api/chart/{type}` | `period` (1d/7d/30d/90d/1y) | `chart:{type}:{period}` | `{series: [[ts, value], ...]}` |
-| GET | `/api/feed` | `lang` (en/ko/ja) | `feed:{lang}` | `{items: [{id, title, url, published_at, source}, ...]}` |
+| GET | `/api/feed` | `lang` (en/ko/ja) | `feed:{lang}`, `media:items` | `{items: [{kind, id, ts (ISO), title?, url, category?, source?}, ...], fetched_at}` — 트윗(`kind:"tweet"`)과 뉴스(`kind:"news"`)를 `ts` 내림차순으로 머지, 최대 25건. 뉴스 항목은 `title`·`category`·`source`(퍼블리셔명) 추가 포함. |
 | GET | `/api/governance` | — | `governance` | `{proposals: [{id, title, status, url}, ...]}` |
 | GET | `/api/analytics/realtime-prices` | — | `realtime_prices` | `{exchanges: [{name, price, volume_24h, ts}, ...]}` |
 | GET | `/api/analytics/exchanges` | — | `exchanges` | `{cex: [...], dex: [...]}` |
@@ -216,6 +218,7 @@ api/main.py
 | `holders` | 3600s | `collect_holders` | 3600s | `/api/analytics/holders` |
 | `homepage` | 86400s | `collect_homepage` | 86400s | (internal / pre-render) |
 | `kr_companies` | 1800s | `collect_kr_companies` | 1800s | `/api/analytics/kr-companies` |
+| `media:items` | 7200s | `collect_media` | 3600s | `/api/feed` |
 
 **Rule**: Producer interval MUST be ≤ TTL/2 to ensure no serving stale-miss gaps.
 

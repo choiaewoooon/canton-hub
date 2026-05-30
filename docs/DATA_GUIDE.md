@@ -55,11 +55,43 @@ return _EMPTY_* skeleton (HTTP 200, empty payload)
 | 14 | Kraken `/0/public/Ticker` | REST | 5s | `realtime_prices.py` | same |
 | 15 | Binance Futures `/fapi/v1/ticker/24hr` | REST | 5s | `realtime_prices.py` | same |
 | 16 | ccview.io | Playwright scrape (fallback) | 1h | `holders_collector.py` | `/api/analytics/holders` |
+| 17 | Google News RSS (`"Canton Network"` 정확구문) | RSS | 1h | `media_collector.py` | `/api/feed` |
+| 18 | Canton 공식 블로그 (`canton.network/blog/rss.xml`) | RSS | 1h | `media_collector.py` | `/api/feed` |
+| 19 | Digital Asset 블로그 (`blog.digitalasset.com/blog/rss.xml`) | RSS | 1h | `media_collector.py` | `/api/feed` |
 
 **Fallback chains** (ordered):
 - **Network stats**: CantonScan REST `/stats` → CantonScan HTML scrape → Playwright render → file cache → `_EMPTY_NETWORK`
 - **Holders**: CantonScan REST → ccview.io Playwright → file cache → `_EMPTY_HOLDERS`
 - **Realtime prices**: parallel fan-out across CEX/DEX; each source independently degrades
+
+---
+
+### 2.1 미디어 RSS 수집 흐름
+
+```
+1시간 폴링 (collect_media, scheduler.py)
+    │
+    ▼
+media_collector.py — RSS 3종 fetch + feedparser 파싱
+    │  guid 기반 중복 제거 → data/media_items.json 링버퍼(캐패시티 60)에 저장
+    ▼
+신규 항목만 처리 (회당 최대 12건 캡 — 비용 가드)
+    │
+    ├── news_summarizer.py → Anthropic Haiku
+    │       한국어 1-call 요약 + 카테고리 분류
+    │       (9개 카테고리: partnership/validator/etf_product/institutional/
+    │        dat_vehicle/tokenomics/funding/network_metric/other)
+    │
+    └── api/translator.py → translate() EN→ko/ja/zh 제목 번역
+    │
+    ▼
+cache.set("media:items", ..., ttl=7200)
+    │
+    ▼
+GET /api/feed — 트윗(feed:{lang}) + 뉴스(media:items) 머지 → ts 내림차순, 최대 25건
+```
+
+**비용 게이팅**: 이미 처리된 guid는 재처리하지 않음. 1회 실행당 최대 12건(`config.MEDIA_MAX_NEW_PER_RUN`)만 LLM/번역 호출.
 
 ---
 

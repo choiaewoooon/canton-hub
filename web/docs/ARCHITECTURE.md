@@ -76,6 +76,11 @@ app/
  ├─ page.tsx ─────────────────▶ components/hero, kpi, charts, governance, network
  ├─ analytics/page.tsx ───────▶ components/analytics, charts
  └─ feed/page.tsx ────────────▶ components/feed, feed-page, governance
+                                       │  components/feed/news-category.ts
+                                       │    카테고리 slug → label + 배지 색상 매핑
+                                       │    (9개: partnership/validator/etf_product/
+                                       │     institutional/dat_vehicle/tokenomics/
+                                       │     funding/network_metric/other)
                                        │
                                        ▼
                                  lib/api.ts (SWR)
@@ -122,7 +127,7 @@ Source: `lib/api.ts` (REST) + `lib/sse.ts` (streaming).
 | `useNetwork()` | `/api/network` | 300s | `NetworkData` |
 | `useNetworkStatus()` | `/api/network/status` | 3600s | `NetworkStatus` |
 | `useChart(type, period)` | `/api/chart/{type}` | 300s | `ChartPoint[]` |
-| `useFeed(lang)` | `/api/feed?lang={lang}` | 900s | `FeedData` |
+| `useFeed(lang)` | `/api/feed?lang={lang}` | 900s | `FeedData` — 트윗(`kind:"tweet"`)과 뉴스(`kind:"news"`)가 통합된 타임라인. `ts` 내림차순, 최대 25건. |
 | `useGovernance()` | `/api/governance` | 3600s | `GovernanceData` |
 | `useRewardSplit(period)` | `/api/analytics/reward-split` | 900s | `RewardSplitPoint[]` |
 | `useAmuletPrice(period)` | `/api/analytics/amulet-price` | 900s | `AmuletPricePoint[]` |
@@ -149,7 +154,7 @@ Exported from `lib/types.ts`:
 | `NetworkData` | `useNetwork`, `network/*` |
 | `NetworkStatus` | `useNetworkStatus`, `kpi/*` |
 | `ChartPoint` | `useChart`, `charts/*` |
-| `FeedData` | `useFeed`, `feed-page/TwitterArchive`, `EcosystemGuide`, `ParticipationGuide` |
+| `FeedData`, `FeedItem` | `useFeed`, `feed-page/TwitterArchive`, `feed/FeedCard`, `EcosystemGuide`, `ParticipationGuide` — `FeedItem` 필드: `kind`(`"tweet"` \| `"news"`), `title?`, `category?`, `source?` |
 | `GovernanceData` | `useGovernance`, `governance/*`, `feed-page/GovernanceCalendar` |
 | `RewardSplitPoint` | `useRewardSplit`, `analytics/RewardSplitChart` |
 | `AmuletPricePoint` | `useAmuletPrice`, `analytics/AmuletPriceChart` |
