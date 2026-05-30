@@ -47,6 +47,7 @@ export interface ChartPoint {
 export interface FeedItem {
   source: string;
   time_ago: string;
+  ts?: string; // ISO UTC — 프론트에서 상대시간 실시간 계산용 (time_ago는 폴백)
   text: string;
   url: string;
 }
@@ -55,6 +56,7 @@ export interface FeedData {
   lang: string;
   items: FeedItem[];
   ai_summary: string;
+  fetched_at?: string | null; // ISO UTC — 마지막 수집 시각
 }
 
 export interface CIPItem {

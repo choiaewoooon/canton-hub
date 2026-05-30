@@ -542,22 +542,32 @@ async def collect_charts(cache: TTLCache):
 
 
 async def collect_feed(cache: TTLCache):
-    """Twitter fetch every 15 min; AI summarize only at SUMMARIZE_WINDOWS_KST.
+    """Twitter fetch only at SUMMARIZE_WINDOWS_KST; AI summarize on the same window.
 
-    Cost guard: Anthropic Messages API (Sonnet 4.6) costs ~$0.01 per call. The
-    feed loop fires every 15 min for fresh "time_ago" labels — but calling the
-    LLM 96× a day wasted ~95% of spend on identical tweet sets. Now we only
-    summarize when the current KST window advances (00:00 or 12:00 KST), and
-    the last summary is persisted to disk so process restarts don't re-trigger.
+    Cost guard: RapidAPI Twitter241 BASIC plan allows 1,000 req/month. Originally
+    the loop fetched tweets every 15 min (96×/day × 2 accounts = 192 req/day →
+    plan exhausted in ~5 days). Now the RapidAPI call is gated by the same KST
+    00/12 windows as the LLM summarizer — 2 fetches/day × 2 accounts × 30 days
+    = 120 req/month, well inside BASIC. Anthropic Sonnet call is independently
+    gated by the persisted `feed_summary.json` timestamp.
     """
+    window = _current_window_start()
+    cached_window = cache.get("feed:window")
+    if cached_window == window.isoformat():
+        logger.info(
+            f"Feed window unchanged ({window.isoformat()}) — RapidAPI fetch skipped"
+        )
+        return
+
     from collectors import TwitterCollector
     collector = TwitterCollector()
     try:
         tweets = await collector.collect_all()
+        # Mark window attempted even if fetch fails (e.g. RapidAPI quota 429) so
+        # the next _loop tick doesn't hammer the API until the next KST window.
+        cache.set("feed:window", window.isoformat(), ttl=46800)
         if not tweets:
             return
-
-        window = _current_window_start()
         summaries, cached_ts = _load_feed_summary()
         summaries = {lang: _normalize_bullets(s, lang) for lang, s in summaries.items()}
 
@@ -596,12 +606,25 @@ async def collect_feed(cache: TTLCache):
         all_tweets = []
         for account, tw_list in tweets.items():
             for tw in sorted(tw_list, key=lambda t: t.created_at, reverse=True)[:5]:
-                all_tweets.append({"source": f"@{tw.username}", "time_ago": _relative_time(tw.created_at), "text": tw.text, "url": tw.url})
-        # Feed cache TTL stays 15min so "time_ago" labels stay fresh even between summarize windows.
+                created_utc = tw.created_at.astimezone(timezone.utc)
+                all_tweets.append({
+                    "source": f"@{tw.username}",
+                    # 절대 타임스탬프 — 프론트에서 상대시간을 매 렌더 재계산(수집 주기와 분리).
+                    "ts": created_utc.isoformat(),
+                    # 폴백(ts 미지원 구 프론트 호환). 수집이 2회/일로 게이팅돼 굳으면 stale함.
+                    "time_ago": _relative_time(tw.created_at),
+                    "text": tw.text,
+                    "url": tw.url,
+                })
+        # Cache covers one KST window (12h) + 1h slack so the next collect_feed
+        # tick can see `feed:window` and short-circuit without a RapidAPI call.
+        # time_ago는 여기서 굳으므로(2회/일 수집) 프론트는 `ts`로 매 렌더 재계산한다.
+        fetched_at = datetime.now(timezone.utc).isoformat()
         for lang in ("ko", "en", "ja", "zh"):
             summary = web_summaries.get(lang) or web_summaries.get("ko", "")
-            cache.set(f"feed:{lang}", {"lang": lang, "items": all_tweets[:5], "ai_summary": summary}, ttl=900)
-        logger.info(f"Feed cached: {len(all_tweets)} tweets, langs={list(web_summaries.keys())}")
+            cache.set(f"feed:{lang}", {"lang": lang, "items": all_tweets[:5], "ai_summary": summary, "fetched_at": fetched_at}, ttl=46800)
+        cache.set("feed:window", window.isoformat(), ttl=46800)
+        logger.info(f"Feed cached: {len(all_tweets)} tweets, langs={list(web_summaries.keys())}, window={window.isoformat()}")
     except Exception as e:
         logger.error(f"Feed collection failed: {e}")
 
@@ -645,15 +668,19 @@ async def collect_governance(cache: TTLCache):
 def _convert_telegram_html(html: str) -> str:
     """텔레그램 HTML 포맷을 웹용 순수 텍스트로 변환.
 
-    <a href="URL">텍스트</a> → 텍스트 (URL)
+    <a href="URL">텍스트</a> → (제거) — 웹 UI는 각 트윗 카드를 따로 노출하므로
+                                요약 본문의 "원문/Source/原文" 인라인 링크는 불필요
     <b>텍스트</b> → 텍스트
     <blockquote>텍스트</blockquote> → 텍스트
+    줄 끝에 남는 trailing space/연속 공백은 정리
     """
     import re
-    # <a href="URL">텍스트</a> → 텍스트
-    text = re.sub(r'<a\s+href="[^"]*">([^<]*)</a>', r'\1', html)
+    # Anchor 통째로 제거 (앞 공백 포함)
+    text = re.sub(r'\s*<a\s+href="[^"]*">[^<]*</a>', '', html)
     # Remove other HTML tags
     text = re.sub(r'<[^>]+>', '', text)
+    # 줄별 trailing 공백 정리
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
     return text.strip()
 
 

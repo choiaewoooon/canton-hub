@@ -1,6 +1,8 @@
 "use client";
 
 import { useFeed } from "@/lib/api";
+import { relativeTime, kstTimestamp } from "@/lib/format";
+import { useNow } from "@/lib/use-now";
 
 interface FeedCardProps {
   lang: string;
@@ -11,12 +13,18 @@ const TITLES: Record<string, string> = { ko: "캔톤 소식", en: "Canton News",
 export default function FeedCard({ lang }: FeedCardProps) {
   const { data } = useFeed(lang);
   const visibleItems = data?.items?.slice(0, 3) || [];
+  const now = useNow();
 
   return (
     <div className="bg-canton-card border border-canton-border rounded-[10px] p-4">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-[13px] font-semibold text-zinc-400">{TITLES[lang] || TITLES.en}</span>
         <span className="text-[10px] text-zinc-600 bg-zinc-900 px-1.5 py-0.5 rounded">AI 번역</span>
+        {data?.fetched_at && (
+          <span className="ml-auto text-[10px] text-zinc-600" title={kstTimestamp(data.fetched_at)}>
+            {(lang === "ko" ? "갱신 " : "Updated ") + relativeTime(data.fetched_at, lang, now)}
+          </span>
+        )}
       </div>
 
       {data?.ai_summary && (
@@ -41,14 +49,16 @@ export default function FeedCard({ lang }: FeedCardProps) {
           <div key={i} className={`py-2.5 ${i < visibleItems.length - 1 ? "border-b border-canton-border" : ""}`}>
             <div className="flex items-center gap-1.5 text-[10px] text-zinc-600 uppercase tracking-wider mb-1">
               {item.source}
-              <span className="text-zinc-700 normal-case tracking-normal">{item.time_ago}</span>
+              <span className="text-zinc-700 normal-case tracking-normal" title={kstTimestamp(item.ts)}>
+                {item.ts ? relativeTime(item.ts, lang, now) : item.time_ago}
+              </span>
             </div>
             <a href={item.url} target="_blank" rel="noopener" className="text-[13px] text-zinc-400 leading-relaxed hover:text-zinc-300 transition">
               {item.text}
             </a>
           </div>
         ))
-      ) : (
+      ) : data?.ai_summary ? null : (
         <p className="text-[13px] text-zinc-600 py-4">소식을 불러오는 중...</p>
       )}
 

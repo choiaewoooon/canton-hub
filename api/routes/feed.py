@@ -18,5 +18,5 @@ async def get_feed(
         lang = "en"
     data = cache.get(f"feed:{lang}")
     if data is None:
-        return {"lang": lang, "items": [], "ai_summary": ""}
+        return {"lang": lang, "items": [], "ai_summary": "", "fetched_at": None}
     return data

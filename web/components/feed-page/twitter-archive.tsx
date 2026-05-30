@@ -1,6 +1,8 @@
 "use client";
 
 import { useFeed } from "@/lib/api";
+import { relativeTime, kstTimestamp } from "@/lib/format";
+import { useNow } from "@/lib/use-now";
 
 interface Props {
   lang: string;
@@ -34,14 +36,31 @@ const LOADING_LABEL: Record<string, string> = {
   zh: "正在加载推文...",
 };
 
+const CADENCE_LABEL: Record<string, string> = {
+  ko: "매일 0시·12시 갱신 (KST)",
+  en: "Updated daily at 00:00 · 12:00 KST",
+  ja: "毎日0時・12時更新 (KST)",
+  zh: "每日0点·12点更新 (KST)",
+};
+
+const UPDATED_PREFIX: Record<string, string> = {
+  ko: "마지막 갱신",
+  en: "Updated",
+  ja: "最終更新",
+  zh: "最后更新",
+};
+
 export default function TwitterArchive({ lang }: Props) {
   const { data } = useFeed(lang);
   const items = data?.items || [];
+  const now = useNow();
 
   const title = TITLE[lang] || TITLE.en;
   const translatedLabel = TRANSLATED_LABEL[lang] || TRANSLATED_LABEL.en;
   const briefLabel = BRIEF_LABEL[lang] || BRIEF_LABEL.en;
   const loadingLabel = LOADING_LABEL[lang] || LOADING_LABEL.en;
+  const cadenceLabel = CADENCE_LABEL[lang] || CADENCE_LABEL.en;
+  const updatedPrefix = UPDATED_PREFIX[lang] || UPDATED_PREFIX.en;
 
   return (
     <div className="bg-canton-card border border-canton-border rounded-[10px] p-5">
@@ -50,6 +69,10 @@ export default function TwitterArchive({ lang }: Props) {
           <h3 className="text-[14px] font-semibold text-zinc-100">{title}</h3>
           <p className="text-[11px] text-zinc-500 mt-0.5">
             @CantonNetwork · @CantonFdn
+          </p>
+          <p className="text-[10px] text-zinc-600 mt-1">
+            {cadenceLabel}
+            {data?.fetched_at ? ` · ${updatedPrefix} ${relativeTime(data.fetched_at, lang, now)}` : ""}
           </p>
         </div>
         <span className="text-[10px] text-zinc-600 bg-zinc-900 px-2 py-1 rounded">
@@ -62,7 +85,7 @@ export default function TwitterArchive({ lang }: Props) {
           <div className="text-[10px] text-canton-lime/70 uppercase tracking-wider mb-2">
             {briefLabel}
           </div>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2.5">
             {data.ai_summary.split("·").filter(Boolean).map((line, i) => (
               <li key={i} className="text-[12px] text-zinc-300 leading-relaxed flex gap-2">
                 <span className="text-canton-lime mt-0.5 shrink-0">•</span>
@@ -88,7 +111,9 @@ export default function TwitterArchive({ lang }: Props) {
             <div className="flex items-center gap-2 text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">
               <span className="text-canton-lime">{item.source}</span>
               <span className="text-zinc-700 normal-case tracking-normal">·</span>
-              <span className="normal-case tracking-normal">{item.time_ago}</span>
+              <span className="normal-case tracking-normal" title={kstTimestamp(item.ts)}>
+                {item.ts ? relativeTime(item.ts, lang, now) : item.time_ago}
+              </span>
             </div>
             <p className="text-[13px] text-zinc-300 leading-relaxed whitespace-pre-line">
               {item.text}
