@@ -57,3 +57,43 @@ async def test_summarize_and_classify_falls_back_on_error():
         async def post(self, *a, **k): raise RuntimeError("boom")
     out = await summarize_and_classify("t", "d", client=_BoomClient())
     assert out == {"summary_ko": "", "category": "other"}
+
+
+def test_extract_category_plain():
+    from news_summarizer import _extract_category
+    assert _extract_category("partnership") == "partnership"
+
+
+def test_extract_category_fenced_or_noisy():
+    from news_summarizer import _extract_category
+    assert _extract_category("```\netf_product\n```") == "etf_product"
+    assert _extract_category("Category: tokenomics.") == "tokenomics"
+
+
+def test_extract_category_unknown_falls_back():
+    from news_summarizer import _extract_category
+    assert _extract_category("i have no idea") == "other"
+
+
+@pytest.mark.asyncio
+async def test_classify_text_parses_response():
+    from news_summarizer import classify_text
+
+    class _FakeResp:
+        def raise_for_status(self): pass
+        def json(self): return {"content": [{"type": "text", "text": "validator"}]}
+
+    class _FakeClient:
+        async def post(self, *a, **k): return _FakeResp()
+
+    assert await classify_text("Global Settlement Network joins as a validator", client=_FakeClient()) == "validator"
+
+
+@pytest.mark.asyncio
+async def test_classify_text_falls_back_on_error():
+    from news_summarizer import classify_text
+
+    class _BoomClient:
+        async def post(self, *a, **k): raise RuntimeError("boom")
+
+    assert await classify_text("anything", client=_BoomClient()) == "other"

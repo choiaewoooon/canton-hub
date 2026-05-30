@@ -97,3 +97,54 @@ async def summarize_and_classify(title: str, description: str, client=None) -> d
     except Exception as e:
         logger.warning(f"news summarize/classify failed: {e}")
         return {"summary_ko": "", "category": "other"}
+
+
+_CLASSIFY_PROMPT = """다음은 Canton Network 관련 짧은 글(트윗)이다.
+아래 유형 중 정확히 하나로 분류하고, 유형 키만 한 단어로 출력해라(설명 금지, 불확실하면 other).
+
+유형: partnership, validator, etf_product, institutional, dat_vehicle, tokenomics, funding, network_metric, other
+
+글: {text}"""
+
+
+def _extract_category(text: str) -> str:
+    """모델 출력(잡텍스트/펜스 포함 가능)에서 유효한 카테고리 키를 추출. 없으면 other."""
+    t = (text or "").strip().lower()
+    for key in CATEGORY_KEYS:
+        if key == "other":
+            continue
+        if key in t:
+            return key
+    return "other"
+
+
+async def classify_text(text: str, client=None) -> str:
+    """짧은 글(트윗)을 유형 키 하나로 분류. 키 없거나 실패 시 'other'."""
+    own = client is None
+    if own and not os.getenv("ANTHROPIC_API_KEY"):
+        return "other"
+    prompt = _CLASSIFY_PROMPT.format(text=(text or "")[:600])
+    try:
+        c = client or httpx.AsyncClient(timeout=TIMEOUT_SECONDS)
+        try:
+            resp = await c.post(
+                ANTHROPIC_API_URL,
+                headers={
+                    "x-api-key": os.getenv("ANTHROPIC_API_KEY", ""),
+                    "anthropic-version": ANTHROPIC_VERSION,
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": config.ANTHROPIC_NEWS_MODEL,
+                    "max_tokens": 16,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            resp.raise_for_status()
+            return _extract_category(resp.json()["content"][0]["text"])
+        finally:
+            if own:
+                await c.aclose()
+    except Exception as e:
+        logger.warning(f"tweet classify failed: {e}")
+        return "other"
