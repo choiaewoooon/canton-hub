@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useFeed } from "@/lib/api";
 import { relativeTime, kstTimestamp } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
@@ -51,8 +52,14 @@ const UPDATED_PREFIX: Record<string, string> = {
   zh: "最后更新",
 };
 
+const NAV_PREV: Record<string, string> = { ko: "이전", en: "Prev", ja: "前へ", zh: "上一页" };
+const NAV_NEXT: Record<string, string> = { ko: "다음", en: "Next", ja: "次へ", zh: "下一页" };
+
 export default function TwitterArchive({ lang }: Props) {
-  const { data } = useFeed(lang);
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [lang]);
+  const { data } = useFeed(lang, page);
+  const totalPages = data?.total_pages ?? 1;
   const items = data?.items || [];
   const now = useNow();
 
@@ -62,6 +69,8 @@ export default function TwitterArchive({ lang }: Props) {
   const loadingLabel = LOADING_LABEL[lang] || LOADING_LABEL.en;
   const cadenceLabel = CADENCE_LABEL[lang] || CADENCE_LABEL.en;
   const updatedPrefix = UPDATED_PREFIX[lang] || UPDATED_PREFIX.en;
+  const navPrev = NAV_PREV[lang] || NAV_PREV.en;
+  const navNext = NAV_NEXT[lang] || NAV_NEXT.en;
 
   return (
     <div className="bg-canton-card border border-canton-border rounded-[10px] p-5">
@@ -109,13 +118,14 @@ export default function TwitterArchive({ lang }: Props) {
             rel="noopener"
             className="block p-3 bg-zinc-900/50 border border-canton-border rounded-md hover:border-zinc-700 transition"
           >
-            <div className="flex items-center gap-2 text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">
-              {item.kind === "news" && (
+            <div className="flex items-center gap-2 text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5 flex-wrap">
+              <span className="normal-case tracking-normal">{item.kind === "news" ? "📰" : "🐦"}</span>
+              {item.category && item.category !== "other" && (
                 <span className={`px-1.5 py-0.5 rounded normal-case tracking-normal ${categoryClass(item.category)}`}>
                   {categoryLabel(item.category, lang)}
                 </span>
               )}
-              <span className="text-canton-lime normal-case tracking-normal">{item.source}</span>
+              <span className={`normal-case tracking-normal ${item.kind === "news" ? "text-zinc-400" : "text-canton-lime"}`}>{item.source}</span>
               <span className="text-zinc-700 normal-case tracking-normal">·</span>
               <span className="normal-case tracking-normal" title={kstTimestamp(item.ts)}>
                 {item.ts ? relativeTime(item.ts, lang, now) : item.time_ago}
@@ -124,12 +134,30 @@ export default function TwitterArchive({ lang }: Props) {
             {item.kind === "news" && item.title && (
               <p className="text-[13px] font-semibold text-zinc-100 leading-snug mb-1">{item.title}</p>
             )}
-            <p className="text-[13px] text-zinc-300 leading-relaxed whitespace-pre-line">
-              {item.text}
-            </p>
+            <p className="text-[13px] text-zinc-300 leading-relaxed whitespace-pre-line">{item.text}</p>
           </a>
         ))}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 mt-4 text-[12px]">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="px-2 py-1 rounded text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition"
+          >
+            ← {navPrev}
+          </button>
+          <span className="text-zinc-500">{page} / {totalPages}</span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="px-2 py-1 rounded text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition"
+          >
+            {navNext} →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
