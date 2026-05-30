@@ -660,7 +660,9 @@ async def collect_media(cache: TTLCache):
         logger.error(f"Media collection failed: {e}")
         return
 
-    new_items = dedup_new(existing, fetched)
+    # 회당 처리량 캡: 콜드스타트 시 수십 건을 한 번에 LLM+번역하면 너무 느리고
+    # 재시작에 취약 → 회당 N건만 처리하고 나머지는 다음 주기에 채운다.
+    new_items = dedup_new(existing, fetched)[: config.MEDIA_MAX_NEW_PER_RUN]
     processed: list[dict] = []
     for item in new_items:
         try:

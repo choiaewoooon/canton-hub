@@ -63,5 +63,7 @@ MEDIA_FEEDS = [
 ]
 # data/media_items.json 링버퍼 보관 건수
 MEDIA_MAX = 60
+# 회당(폴링 1회) 처리할 신규 아이템 최대 수 — 콜드스타트 폭주 방지
+MEDIA_MAX_NEW_PER_RUN = 12
 # 뉴스 한줄 요약+분류용 모델 (트윗 요약은 Sonnet, 뉴스는 저렴한 Haiku)
 ANTHROPIC_NEWS_MODEL = "claude-haiku-4-5-20251001"
