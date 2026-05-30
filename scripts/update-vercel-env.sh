@@ -34,7 +34,8 @@ cd "$WEB_DIR"
   "$VERCEL" env rm NEXT_PUBLIC_API_URL production --yes 2>&1 || true
 
   # 2) Add new value
-  echo "$URL" | "$VERCEL" env add NEXT_PUBLIC_API_URL production 2>&1
+  # NOTE: printf (not echo) — trailing newline이 값에 포함되면 fetch가 invalid URL로 실패함
+  printf "%s" "$URL" | "$VERCEL" env add NEXT_PUBLIC_API_URL production 2>&1
 
   # 3) Trigger production redeploy (baked-in NEXT_PUBLIC_* so rebuild is required)
   "$VERCEL" --prod --yes 2>&1
