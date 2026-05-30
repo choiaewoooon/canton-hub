@@ -30,31 +30,55 @@ async def scrape_cantonscan_homepage() -> dict:
             )
 
             await page.goto("https://www.cantonscan.com/", wait_until="domcontentloaded", timeout=45000)
-            await page.wait_for_timeout(5000)
 
-            text = await page.evaluate("() => document.body.innerText")
+            # Poll every 2s up to ~24s for the Active Addresses KPI value to render.
+            # Other KPIs (Private Updates, Total Transfers) render first; waiting for
+            # AA ensures we don't snapshot before its number arrives.
+            text = ""
+            for _ in range(12):
+                await page.wait_for_timeout(2000)
+                text = await page.evaluate("() => document.body.innerText")
+                if re.search(r"Active Addresses \(24hr?\)\s*\n\s*\d", text):
+                    break
+            else:
+                logger.warning("CantonScan: Active Addresses value did not render within 24s, parsing anyway")
+
             await browser.close()
 
-        # Active Addresses (24hr)\n82 156
-        m = re.search(r"Active Addresses \(24hr?\)\n([\d\s]+)", text)
-        if m:
-            result["active_addresses_24h"] = int(m.group(1).replace(" ", ""))
+        def _parse_int_after(label_re: str) -> int | None:
+            # Tolerate missing trailing "r", arbitrary whitespace/newlines between label
+            # and value, and digits grouped with spaces/commas ("137 041", "137,041").
+            m = re.search(rf"{label_re}\s*[\r\n]+\s*([\d][\d\s,]*?)(?=\s*\n|\s*$)", text)
+            if not m:
+                return None
+            try:
+                return int(m.group(1).replace(" ", "").replace(",", ""))
+            except ValueError:
+                return None
+
+        # Active Addresses (24hr)\n137 041
+        v = _parse_int_after(r"Active Addresses \(24hr?\)")
+        if v is not None:
+            result["active_addresses_24h"] = v
 
         # Active Addresses 변동률
         m = re.search(r"Active Addresses.*?([+-]?\d+\.?\d*)%", text, re.DOTALL)
         if m:
             result["active_addresses_change"] = float(m.group(1))
 
-        # Private Updates (24h)\n689 472 (35.9%)
-        m = re.search(r"Private Updates \(24h\)\n([\d\s]+)\s*\((\d+\.?\d*)%\)", text)
+        # Private Updates (24h)\n689 472 (35.9%) — both legacy "24h" and "24hr" layouts
+        m = re.search(r"Private Updates \(24hr?\)\s*[\r\n]+\s*([\d][\d\s,]*?)\s*\((\d+\.?\d*)%\)", text)
         if m:
-            result["private_tx_count"] = int(m.group(1).replace(" ", ""))
-            result["private_tx_ratio"] = float(m.group(2))
+            try:
+                result["private_tx_count"] = int(m.group(1).replace(" ", "").replace(",", ""))
+                result["private_tx_ratio"] = float(m.group(2))
+            except ValueError:
+                pass
 
         # Total Transfers (24hr)\n1 981 576
-        m = re.search(r"Total Transfers \(24hr?\)\n([\d\s]+)", text)
-        if m:
-            result["total_transfers_24h"] = int(m.group(1).replace(" ", ""))
+        v = _parse_int_after(r"Total Transfers \(24hr?\)")
+        if v is not None:
+            result["total_transfers_24h"] = v
 
         # 파일에 저장
         DATA_FILE.parent.mkdir(exist_ok=True)
