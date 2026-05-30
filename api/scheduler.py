@@ -116,6 +116,29 @@ def _append_kpi_history(entry: dict) -> None:
     _KPI_HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False))
 
 
+# Tweet history — accumulates tweets across collection windows so the feed
+# can paginate past items. Ring buffer of last MEDIA-like cap; dedup by url.
+_TWEET_ITEMS_FILE = Path(__file__).parent.parent / "data" / "tweet_items.json"
+_TWEET_ITEMS_MAX = 200
+
+
+def _load_tweet_items() -> list[dict]:
+    if not _TWEET_ITEMS_FILE.exists():
+        return []
+    try:
+        data = json.loads(_TWEET_ITEMS_FILE.read_text())
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.warning(f"tweet_items load failed: {e}")
+        return []
+
+
+def _save_tweet_items(items: list[dict]) -> None:
+    items = sorted(items, key=lambda x: x.get("ts") or "", reverse=True)[:_TWEET_ITEMS_MAX]
+    _TWEET_ITEMS_FILE.parent.mkdir(exist_ok=True)
+    _TWEET_ITEMS_FILE.write_text(json.dumps(items, ensure_ascii=False))
+
+
 # Stopwords for trending keyword extraction. Intentionally small — signal
 # comes from low-frequency domain terms; big stopword lists strip them.
 _TRENDING_STOPWORDS = {
@@ -576,7 +599,14 @@ async def collect_feed(cache: TTLCache):
         needs_ko_refresh = not summaries.get("ko") or cached_ts is None or cached_ts < window
         if needs_ko_refresh:
             from tweet_summarizer import summarize_tweets
-            ko_summary = _normalize_bullets(await summarize_tweets(tweets), "ko")
+            from collectors.media_collector import load_media_items
+            recent_media = load_media_items()[:8]
+            news_lines = [
+                f"- {m.get('title', {}).get('ko') or m.get('title', {}).get('en') or ''}"
+                for m in recent_media
+                if (m.get('title', {}).get('ko') or m.get('title', {}).get('en'))
+            ]
+            ko_summary = _normalize_bullets(await summarize_tweets(tweets, news_lines=news_lines), "ko")
             summaries = {"ko": ko_summary}
             cached_ts = datetime.now(KST)
             logger.info(
@@ -605,28 +635,37 @@ async def collect_feed(cache: TTLCache):
 
         web_summaries = {lang: _convert_telegram_html(s) for lang, s in summaries.items()}
 
-        all_tweets = []
+        from news_summarizer import classify_text
+        fetched_tweets = []
         for account, tw_list in tweets.items():
-            for tw in sorted(tw_list, key=lambda t: t.created_at, reverse=True)[:5]:
+            for tw in sorted(tw_list, key=lambda t: t.created_at, reverse=True):
                 created_utc = tw.created_at.astimezone(timezone.utc)
-                all_tweets.append({
+                fetched_tweets.append({
                     "source": f"@{tw.username}",
-                    # 절대 타임스탬프 — 프론트에서 상대시간을 매 렌더 재계산(수집 주기와 분리).
                     "ts": created_utc.isoformat(),
-                    # 폴백(ts 미지원 구 프론트 호환). 수집이 2회/일로 게이팅돼 굳으면 stale함.
-                    "time_ago": _relative_time(tw.created_at),
                     "text": tw.text,
                     "url": tw.url,
                 })
+        existing_tweets = _load_tweet_items()
+        seen_urls = {t.get("url") for t in existing_tweets}
+        new_tweets = [t for t in fetched_tweets if t.get("url") not in seen_urls]
+        for t in new_tweets:
+            try:
+                t["category"] = await classify_text(t["text"])
+            except Exception as e:
+                logger.warning(f"tweet classify failed ({t.get('url')}): {e}")
+                t["category"] = "other"
+        if new_tweets:
+            _save_tweet_items(new_tweets + existing_tweets)
+        cache.set("tweet:items", _load_tweet_items(), ttl=46800)
         # Cache covers one KST window (12h) + 1h slack so the next collect_feed
         # tick can see `feed:window` and short-circuit without a RapidAPI call.
-        # time_ago는 여기서 굳으므로(2회/일 수집) 프론트는 `ts`로 매 렌더 재계산한다.
         fetched_at = datetime.now(timezone.utc).isoformat()
         for lang in ("ko", "en", "ja", "zh"):
             summary = web_summaries.get(lang) or web_summaries.get("ko", "")
-            cache.set(f"feed:{lang}", {"lang": lang, "items": all_tweets[:5], "ai_summary": summary, "fetched_at": fetched_at}, ttl=46800)
+            cache.set(f"feed:{lang}", {"lang": lang, "ai_summary": summary, "fetched_at": fetched_at}, ttl=46800)
         cache.set("feed:window", window.isoformat(), ttl=46800)
-        logger.info(f"Feed cached: {len(all_tweets)} tweets, langs={list(web_summaries.keys())}, window={window.isoformat()}")
+        logger.info(f"Feed cached: {len(fetched_tweets)} tweets ({len(new_tweets)} new), langs={list(web_summaries.keys())}, window={window.isoformat()}")
     except Exception as e:
         logger.error(f"Feed collection failed: {e}")
 

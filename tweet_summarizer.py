@@ -28,8 +28,12 @@ MAX_TOKENS = 1024
 TIMEOUT_SECONDS = 30.0
 
 
-async def summarize_tweets(tweets: dict[str, list[TweetData]]) -> str:
-    """수집된 트윗들을 AI로 요약. HTML 태그 포함 (formatter에서 strip)."""
+async def summarize_tweets(tweets: dict[str, list[TweetData]], news_lines=None) -> str:
+    """수집된 트윗들을 AI로 요약. HTML 태그 포함 (formatter에서 strip).
+
+    news_lines: 최근 Canton 미디어 헤드라인 리스트(선택). 주어지면 요약 소스에 추가해
+                모델이 주요 뉴스를 기존 bullet 포맷 안에서 언급할 수 있게 한다.
+    """
     total = sum(len(tw_list) for tw_list in tweets.values())
     if total == 0:
         return ""
@@ -45,6 +49,8 @@ async def summarize_tweets(tweets: dict[str, list[TweetData]]) -> str:
                 f"[likes:{tw.likes} RT:{tw.retweets} views:{tw.views}]"
             )
     raw_text = "\n".join(raw_lines)
+    if news_lines:
+        raw_text += "\n\n[최근 Canton 미디어 헤드라인]\n" + "\n".join(news_lines)
 
     tweet_refs = []
     for i, tw in enumerate(all_tweets):
