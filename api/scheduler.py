@@ -6,6 +6,8 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import httpx
+
 from api.cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -629,6 +631,72 @@ async def collect_feed(cache: TTLCache):
         logger.error(f"Feed collection failed: {e}")
 
 
+async def collect_media(cache: TTLCache):
+    """Canton 미디어 RSS 수집. 신규 아이템만 Haiku 요약+분류 + DeepL 번역.
+
+    비용: 폴링은 무료, 신규 기사만 LLM 처리(하루 ~수 건). 전부 기존이면 LLM 0회.
+    """
+    from collectors.media_collector import (
+        fetch_raw, parse_entries, dedup_new, load_media_items, save_media_items,
+    )
+    from news_summarizer import summarize_and_classify
+    from api.translator import translate, translate_ko
+    import config
+
+    existing = load_media_items()
+    fetched: list[dict] = []
+    try:
+        async with httpx.AsyncClient(
+            timeout=10, follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (CantonHub RSS)"},
+        ) as client:
+            for feed in config.MEDIA_FEEDS:
+                try:
+                    raw = await fetch_raw(feed["url"], client)
+                    fetched.extend(parse_entries(raw, feed["name"]))
+                except Exception as e:
+                    logger.warning(f"Media feed failed ({feed['name']}): {e}")
+    except Exception as e:
+        logger.error(f"Media collection failed: {e}")
+        return
+
+    new_items = dedup_new(existing, fetched)
+    processed: list[dict] = []
+    for item in new_items:
+        try:
+            cls = await summarize_and_classify(item["title_raw"], item["description"])
+            title_en = item["title_raw"]
+            summary_ko = cls["summary_ko"]
+            # 제목: 원문(영문 가정) en, 나머지는 EN→X 번역
+            title = {"en": title_en, "ko": title_en, "ja": title_en, "zh": title_en}
+            for lng in ("ko", "ja", "zh"):
+                t = await translate(title_en, "en", lng)
+                if t:
+                    title[lng] = t
+            # 요약: ko=Haiku, 나머지는 KO→X 번역
+            summary = {"ko": summary_ko, "en": summary_ko, "ja": summary_ko, "zh": summary_ko}
+            if summary_ko:
+                for lng in ("en", "ja", "zh"):
+                    s = await translate_ko(summary_ko, lng)
+                    if s:
+                        summary[lng] = s
+            processed.append({
+                "url": item["url"], "guid": item["guid"], "ts": item["ts"],
+                "publisher": item["publisher"], "category": cls["category"],
+                "title": title, "summary": summary,
+            })
+        except Exception as e:
+            logger.warning(f"Media item processing failed ({item.get('url')}): {e}")
+
+    if processed:
+        save_media_items(processed + existing)
+        cache.set("media:items", load_media_items(), ttl=7200)
+        logger.info(f"Media cached: +{len(processed)} new")
+    else:
+        cache.set("media:items", existing, ttl=7200)
+        logger.info("Media: no new items")
+
+
 async def collect_governance(cache: TTLCache):
     from collectors.governance_collector import GovernanceCollector
     collector = GovernanceCollector()
@@ -848,6 +916,7 @@ async def _deferred_initial(cache: TTLCache):
         collect_exchanges(cache),
         collect_holders(cache),
         collect_kr_companies(cache),
+        collect_media(cache),
         return_exceptions=True,
     )
     # Trending runs after feed to consume latest tweets
@@ -872,6 +941,7 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_network, cache, 300, "network"))
     asyncio.create_task(_loop(collect_charts, cache, 900, "charts"))
     asyncio.create_task(_loop(collect_feed, cache, 900, "feed"))
+    asyncio.create_task(_loop(collect_media, cache, 3600, "media"))  # 60분
     asyncio.create_task(_loop(collect_trending, cache, 900, "trending"))
     asyncio.create_task(_loop(collect_governance, cache, 3600, "governance"))
     asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))
