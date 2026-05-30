@@ -90,6 +90,14 @@ async def trending(cache: TTLCache = Depends(get_cache)):
     return cache.get("analytics:trending") or {"keywords": [], "fetched_at": None}
 
 
+_EMPTY_FUNDING = {"rates": [], "updated_at": None}
+
+
+@router.get("/funding-rates")
+async def funding_rates(cache: TTLCache = Depends(get_cache)):
+    return cache.get("analytics:funding-rates") or _EMPTY_FUNDING
+
+
 @router.get("/kpi-history")
 async def kpi_history():
     """KPI 스냅샷 이력 — 일별 active_addresses / transfers / private_ratio / SV 수.

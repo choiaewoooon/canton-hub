@@ -1,6 +1,10 @@
 import pytest
 import httpx
 from collectors.funding_rates import FundingRate, to_apr
+from httpx import AsyncClient, ASGITransport
+from api.main import app
+from api.dependencies import get_cache
+from api.cache import TTLCache
 
 
 def test_to_apr_1h():
@@ -162,3 +166,32 @@ async def test_collect_all_skips_failures(monkeypatch):
     rates = await m.collect_all_funding_rates()
     assert len(rates) == 2
     assert all(isinstance(r, FundingRate) for r in rates)
+
+
+@pytest.mark.asyncio
+async def test_funding_rates_route_returns_cached():
+    cache = TTLCache()
+    cache.set("analytics:funding-rates", {
+        "rates": [{"source": "Lighter", "fr_apr": 28.0}],
+        "updated_at": "2026-05-15T10:00:00",
+    }, ttl=90)
+    app.dependency_overrides[get_cache] = lambda: cache
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/api/analytics/funding-rates")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["rates"][0]["source"] == "Lighter"
+    assert body["updated_at"] == "2026-05-15T10:00:00"
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_funding_rates_route_empty_cache():
+    app.dependency_overrides[get_cache] = lambda: TTLCache()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/api/analytics/funding-rates")
+    assert resp.status_code == 200
+    assert resp.json() == {"rates": [], "updated_at": None}
+    app.dependency_overrides.clear()
