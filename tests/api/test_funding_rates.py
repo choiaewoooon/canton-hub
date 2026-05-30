@@ -111,3 +111,31 @@ async def test_fetch_extended_funding_parses():
     assert fr.source == "Extended"
     assert fr.period_hours == 1
     assert fr.fr_raw == pytest.approx(0.00005)
+
+
+@pytest.mark.asyncio
+async def test_fetch_binance_funding_parses():
+    from collectors.funding_rates import fetch_binance_funding
+    payload = {"lastFundingRate": "-0.0002", "nextFundingTime": 1747310400000}
+    fr = await fetch_binance_funding(_FakeClient(payload))
+    assert fr.source == "Binance Perp"
+    assert fr.fr_raw < 0
+    assert fr.period_hours == 8
+
+
+@pytest.mark.asyncio
+async def test_fetch_bybit_funding_parses():
+    from collectors.funding_rates import fetch_bybit_funding
+    payload = {"result": {"list": [{"fundingRate": "-0.00045", "nextFundingTime": "1747310400000"}]}}
+    fr = await fetch_bybit_funding(_FakeClient(payload))
+    assert fr.source == "Bybit Perp"
+    assert fr.fr_apr == pytest.approx(-49.275, abs=0.01)
+
+
+@pytest.mark.asyncio
+async def test_fetch_okx_funding_parses():
+    from collectors.funding_rates import fetch_okx_funding
+    payload = {"data": [{"fundingRate": "0.00008", "fundingTime": "1747310400000"}]}
+    fr = await fetch_okx_funding(_FakeClient(payload))
+    assert fr.source == "OKX Perp"
+    assert fr.period_hours == 8

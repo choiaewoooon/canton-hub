@@ -119,3 +119,65 @@ async def fetch_extended_funding(client) -> FundingRate | None:
     except Exception as e:
         logger.warning(f"Extended funding rate failed: {e}")
     return None
+
+
+async def fetch_binance_funding(client) -> FundingRate | None:
+    try:
+        resp = await client.get(
+            "https://fapi.binance.com/fapi/v1/premiumIndex",
+            params={"symbol": "CCUSDT"}, timeout=5,
+        )
+        resp.raise_for_status()
+        d = resp.json()
+        fr_raw = float(d.get("lastFundingRate", 0))
+        next_ts = int(d.get("nextFundingTime", 0)) // 1000
+        return FundingRate(
+            "Binance Perp", "CEX", "perpetual", "CC/USDT",
+            fr_raw, 8, to_apr(fr_raw, 8), next_ts, "binance.com",
+        )
+    except Exception as e:
+        logger.warning(f"Binance funding rate failed: {e}")
+    return None
+
+
+async def fetch_bybit_funding(client) -> FundingRate | None:
+    try:
+        resp = await client.get(
+            "https://api.bybit.com/v5/market/tickers",
+            params={"category": "linear", "symbol": "CCUSDT"}, timeout=5,
+        )
+        resp.raise_for_status()
+        row = resp.json()["result"]["list"][0]
+        fr_raw = float(row.get("fundingRate", 0))
+        next_ts = int(row.get("nextFundingTime", 0)) // 1000
+        return FundingRate(
+            "Bybit Perp", "CEX", "perpetual", "CC/USDT",
+            fr_raw, 8, to_apr(fr_raw, 8), next_ts, "bybit.com",
+        )
+    except Exception as e:
+        logger.warning(f"Bybit funding rate failed: {e}")
+    return None
+
+
+async def fetch_okx_funding(client) -> FundingRate | None:
+    for inst in ("CC-USDT-SWAP", "CC-USD-SWAP"):  # instId 폴백
+        try:
+            resp = await client.get(
+                "https://www.okx.com/api/v5/public/funding-rate",
+                params={"instId": inst}, timeout=5,
+            )
+            resp.raise_for_status()
+            rows = resp.json().get("data", [])
+            if not rows:
+                continue
+            d = rows[0]
+            fr_raw = float(d.get("fundingRate", 0))
+            next_ts = int(d.get("fundingTime", 0)) // 1000
+            return FundingRate(
+                "OKX Perp", "CEX", "perpetual",
+                "CC/USDT" if "USDT" in inst else "CC/USD",
+                fr_raw, 8, to_apr(fr_raw, 8), next_ts, "okx.com",
+            )
+        except Exception as e:
+            logger.warning(f"OKX funding rate failed ({inst}): {e}")
+    return None
