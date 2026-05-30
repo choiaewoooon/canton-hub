@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 from collections import Counter
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -200,6 +201,17 @@ async def collect_realtime_prices(cache: TTLCache):
         cache.set("analytics:realtime-prices", result, ttl=10)
     except Exception as e:
         logger.error(f"Realtime prices failed: {e}")
+
+
+async def collect_funding_rates(cache: TTLCache):
+    from collectors.funding_rates import collect_all_funding_rates
+    rates = await collect_all_funding_rates()
+    if rates:  # 전부 실패 시 직전 캐시 유지
+        cache.set("analytics:funding-rates", {
+            "rates": [asdict(r) for r in rates],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }, ttl=90)
+        logger.info(f"cached: funding-rates ({len(rates)}/7 거래소)")
 
 
 async def collect_exchanges(cache: TTLCache):
@@ -987,8 +999,10 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))
     asyncio.create_task(_loop(collect_exchanges, cache, 900, "exchanges"))  # 15분
     asyncio.create_task(_loop(collect_realtime_prices, cache, 5, "realtime-prices"))  # 5초
+    asyncio.create_task(_loop(collect_funding_rates, cache, 60, "funding-rates"))  # 60초
     asyncio.create_task(_loop(collect_holders, cache, 3600, "holders"))  # 1시간
     asyncio.create_task(_loop(collect_kr_companies, cache, 1800, "kr-companies"))  # 30분
 
     # 즉시 1회 실행 — 첫 페이지 로드 시 빈 데이터 방지
     asyncio.create_task(collect_realtime_prices(cache))
+    asyncio.create_task(collect_funding_rates(cache))
