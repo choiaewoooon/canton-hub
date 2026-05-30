@@ -8,6 +8,13 @@ def test_parse_valid_json():
     assert out == {"summary_ko": "파트너십 체결됨", "category": "partnership"}
 
 
+def test_parse_fenced_json():
+    # 모델이 ```json ... ``` 펜스로 감싸 반환해도 파싱돼야 한다.
+    raw = '```json\n{"summary": "파트너십 체결됨", "category": "partnership"}\n```'
+    out = _parse_classification(raw)
+    assert out == {"summary_ko": "파트너십 체결됨", "category": "partnership"}
+
+
 def test_parse_unknown_category_falls_back_to_other():
     out = _parse_classification('{"summary": "x", "category": "banana"}')
     assert out["category"] == "other"

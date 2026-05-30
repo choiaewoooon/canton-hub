@@ -47,9 +47,17 @@ JSON만 출력해라(설명 금지): {{"summary": "...", "category": "키"}}
 
 
 def _parse_classification(text: str) -> dict:
-    """Anthropic이 돌려준 텍스트(JSON)를 파싱. 실패/이상치는 안전 폴백."""
+    """Anthropic이 돌려준 텍스트(JSON)를 파싱. 실패/이상치는 안전 폴백.
+
+    모델이 종종 ```json ... ``` 코드펜스나 앞뒤 설명을 붙이므로,
+    첫 '{'부터 마지막 '}'까지의 블록만 추출해 파싱한다.
+    """
     try:
-        d = json.loads(text)
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return {"summary_ko": "", "category": "other"}
+        d = json.loads(text[start:end + 1])
         cat = d.get("category", "other")
         if cat not in CATEGORY_KEYS:
             cat = "other"
