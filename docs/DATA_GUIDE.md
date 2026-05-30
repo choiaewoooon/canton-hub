@@ -88,10 +88,48 @@ media_collector.py — RSS 3종 fetch + feedparser 파싱
 cache.set("media:items", ..., ttl=7200)
     │
     ▼
-GET /api/feed — 트윗(feed:{lang}) + 뉴스(media:items) 머지 → ts 내림차순, 최대 25건
+cache.set("tweet:items", ..., ttl=46800)  ← data/tweet_items.json 링버퍼에도 영속
+    │
+    ▼
+GET /api/feed — tweet:items + media:items 머지 → ts 내림차순 페이지네이션(10건/page)
 ```
 
 **비용 게이팅**: 이미 처리된 guid는 재처리하지 않음. 1회 실행당 최대 12건(`config.MEDIA_MAX_NEW_PER_RUN`)만 LLM/번역 호출.
+
+---
+
+### 2.2 트윗 수집 흐름 (피드 v2)
+
+```
+15분 폴링 (collect_feed, scheduler.py)
+    │
+    ▼
+twitter_collector.py — RapidAPI Twitter API45 fetch
+    │  url 기준 중복 제거
+    ├── news_summarizer.classify_text → Anthropic Haiku
+    │       각 신규 트윗을 9개 카테고리 중 하나로 분류
+    │
+    ▼
+data/tweet_items.json 링버퍼에 append (캐패시티 200, 오래된 순 삭제)
+    │
+    ▼
+cache.set("tweet:items", ..., ttl=46800)
+    │
+    ▼
+summarize_tweets(tweets, news_lines)  ← load_media_items()[:8]의 뉴스 헤드라인 포함
+    │
+    ▼
+cache.set("feed:{lang}", {lang, ai_summary, fetched_at}, ttl=900)
+    │   ※ items는 feed:{lang}에 저장되지 않음 (tweet:items에 별도 보관)
+    │
+    ▼
+GET /api/feed — tweet:items + media:items 머지 → ts 내림차순 페이지네이션(10건/page)
+```
+
+**주요 변경점 (v2)**:
+- 트윗이 `feed:{lang}.items`에 저장되던 방식(~13h 수명)에서 `tweet:items` 영속 링버퍼로 전환
+- `ai_summary`는 최근 Canton 미디어 헤드라인(뉴스 최대 8건)을 포함해 생성
+- 각 트윗에 `category` 필드 추가 (Haiku 분류, `"other"` 제외 시 UI에 배지 표시)
 
 ---
 
@@ -306,5 +344,6 @@ python -c "from canton_hub.config import validate_env; validate_env()"
 | Date | Change | Reason |
 |---|---|---|
 | 2026-04-14 | Initial generation | docs-init auto-generation |
+| 2026-05-30 | 피드 v2 반영: 트윗 누적 링버퍼(data/tweet_items.json), Haiku 카테고리 분류, ai_summary에 뉴스 헤드라인 포함, 2.2 트윗 수집 흐름 섹션 추가 | feat/feed-v2-categorize-paginate |
 
 <!-- TODO: add entries on every collector change, TTL adjustment, or new data source -->

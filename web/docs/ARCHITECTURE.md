@@ -111,7 +111,7 @@ app/
 |-------|------|------------|----------------|
 | `/` | `app/page.tsx` | `usePrice`, `useNetwork`, `useNetworkStatus`, `useChart`, `useGovernance`, `useRealtimePrice` (SSE) | `hero/HeroPrice`, `kpi/KpiGrid`, `charts/ChartTabs`, `network/BurnMint`, `governance/HolderCard`, `governance/GovernanceCard` |
 | `/analytics` | `app/analytics/page.tsx` | `useRewardSplit`, `useCumulative`, `useAmuletPrice`, `useBurnBreakdown`, `useExchanges`, `useRealtimePrices`, `useHolders` | `analytics/RewardSplitChart`, `analytics/CumulativeSupply`, `analytics/AmuletPriceChart`, `analytics/ExchangeList`, `analytics/HoldersTable` |
-| `/feed` | `app/feed/page.tsx` | `useFeed`, `useGovernance`, `useKrCompanies` | `feed-page/TwitterArchive`, `feed-page/GovernanceCalendar`, `feed-page/EcosystemGuide`, `feed-page/ParticipationGuide`, `feed-page/KoreanCompanies` |
+| `/feed` | `app/feed/page.tsx` | `useFeed(lang, page)`, `useGovernance`, `useKrCompanies` | `feed-page/TwitterArchive`, `feed-page/GovernanceCalendar`, `feed-page/EcosystemGuide`, `feed-page/ParticipationGuide`, `feed-page/KoreanCompanies` — 통합 타임라인(타입 아이콘: 트윗/뉴스 구분), 카테고리 배지, prev/next 페이지네이션 |
 
 **Shared (all routes)**: `nav/TopNav`, `footer`, theme toggle, language switch.
 
@@ -127,7 +127,7 @@ Source: `lib/api.ts` (REST) + `lib/sse.ts` (streaming).
 | `useNetwork()` | `/api/network` | 300s | `NetworkData` |
 | `useNetworkStatus()` | `/api/network/status` | 3600s | `NetworkStatus` |
 | `useChart(type, period)` | `/api/chart/{type}` | 300s | `ChartPoint[]` |
-| `useFeed(lang)` | `/api/feed?lang={lang}` | 900s | `FeedData` — 트윗(`kind:"tweet"`)과 뉴스(`kind:"news"`)가 통합된 타임라인. `ts` 내림차순, 최대 25건. |
+| `useFeed(lang, page)` | `/api/feed?lang={lang}&page={page}` | 900s | `FeedData` — 트윗(`kind:"tweet"`)과 뉴스(`kind:"news"`)가 통합된 타임라인. `ts` 내림차순, 10건/page 페이지네이션. 응답: `{lang, items, ai_summary, fetched_at, page, page_size, total, total_pages}`. 트윗은 `category` 포함(분류값 "other"이면 배지 미표시). `/feed`는 prev/next 페이지네이션 UI 제공. 대시보드 "캔톤 소식" 카드는 page=1 최대 3건만 표시. |
 | `useGovernance()` | `/api/governance` | 3600s | `GovernanceData` |
 | `useRewardSplit(period)` | `/api/analytics/reward-split` | 900s | `RewardSplitPoint[]` |
 | `useAmuletPrice(period)` | `/api/analytics/amulet-price` | 900s | `AmuletPricePoint[]` |
@@ -154,7 +154,7 @@ Exported from `lib/types.ts`:
 | `NetworkData` | `useNetwork`, `network/*` |
 | `NetworkStatus` | `useNetworkStatus`, `kpi/*` |
 | `ChartPoint` | `useChart`, `charts/*` |
-| `FeedData`, `FeedItem` | `useFeed`, `feed-page/TwitterArchive`, `feed/FeedCard`, `EcosystemGuide`, `ParticipationGuide` — `FeedItem` 필드: `kind`(`"tweet"` \| `"news"`), `title?`, `category?`, `source?` |
+| `FeedData`, `FeedItem` | `useFeed`, `feed-page/TwitterArchive`, `feed/FeedCard`, `EcosystemGuide`, `ParticipationGuide` — `FeedData` 필드: `lang`, `items`, `ai_summary`, `fetched_at`, `page`, `page_size`, `total`, `total_pages`. `FeedItem` 필드: `kind`(`"tweet"` \| `"news"`), `title?`(뉴스 lang별), `category?`, `source?` |
 | `GovernanceData` | `useGovernance`, `governance/*`, `feed-page/GovernanceCalendar` |
 | `RewardSplitPoint` | `useRewardSplit`, `analytics/RewardSplitChart` |
 | `AmuletPricePoint` | `useAmuletPrice`, `analytics/AmuletPriceChart` |
@@ -287,3 +287,4 @@ git push → Vercel webhook → install → next build (Turbopack)
 | 날짜 | 변경 | 이유 |
 |------|------|------|
 | 2026-04-14 | 초기 생성 | docs-init으로 자동 생성 |
+| 2026-05-30 | 피드 v2 반영: `useFeed(lang, page)` 페이지네이션, FeedData 응답 shape 업데이트, /feed 타입 아이콘·카테고리 배지·페이지네이션 UI 기록 | feat/feed-v2-categorize-paginate |

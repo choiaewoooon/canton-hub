@@ -88,7 +88,7 @@ api/main.py
         ├── collectors/cantonscan_scraper.py     ─┼▶ CantonScan (API→HTML→Playwright)
         ├── collectors/twitter_collector.py      ─▶ RapidAPI Twitter API45
         ├── collectors/media_collector.py        ─▶ RSS 3종 (Google News / Canton 블로그 / DA 블로그)
-        ├── news_summarizer.py                   ─▶ Anthropic Haiku (KO 요약 + 카테고리 분류)
+        ├── news_summarizer.py                   ─▶ Anthropic Haiku (KO 요약 + 카테고리 분류, 트윗 분류: classify_text)
         ├── collectors/governance_collector.py   ─▶ GitHub CIP repo
         ├── collectors/holders_collector.py      ─▶ CantonScan
         ├── collectors/kr_companies_collector.py ─▶ CantonScan party API
@@ -104,6 +104,10 @@ api/main.py
 | All HTTP I/O MUST be async (`httpx.AsyncClient`) | No `requests` library |
 | Cache writes only from scheduler loops | Routes are read-only |
 
+**파일 캐시 — 피드 전용**:
+- `data/tweet_items.json` — 트윗 링버퍼 (최대 200건, url 기준 중복 제거). `collect_feed` 실행 시마다 신규 트윗을 append하고 초과분을 오래된 순으로 삭제. 각 항목은 `news_summarizer.classify_text`(Haiku)로 분류된 `category` 필드 포함. `tweet:items` 캐시(TTL 46800s)의 영속 폴백.
+- `data/media_items.json` — 뉴스 링버퍼 (캐패시티 60). 기존 방식 유지.
+
 ---
 
 ## 3. API Contracts
@@ -115,7 +119,7 @@ api/main.py
 | GET | `/api/network` | — | `network` | `{tps, validators, total_stake, block_height, ...}` |
 | GET | `/api/network/status` | — | `network_status` | `{status, latency_ms, uptime_pct, ...}` |
 | GET | `/api/chart/{type}` | `period` (1d/7d/30d/90d/1y) | `chart:{type}:{period}` | `{series: [[ts, value], ...]}` |
-| GET | `/api/feed` | `lang` (en/ko/ja) | `feed:{lang}`, `media:items` | `{items: [{kind, id, ts (ISO), title?, url, category?, source?}, ...], fetched_at}` — 트윗(`kind:"tweet"`)과 뉴스(`kind:"news"`)를 `ts` 내림차순으로 머지, 최대 25건. 뉴스 항목은 `title`·`category`·`source`(퍼블리셔명) 추가 포함. |
+| GET | `/api/feed` | `lang` (en/ko/ja), `page` (int, default 1) | `feed:{lang}`, `tweet:items`, `media:items` | `{lang, items, ai_summary, fetched_at, page, page_size(=10), total, total_pages}` — `tweet:items`와 `media:items`를 머지해 `ts` 내림차순 정렬 후 10건/page 페이지네이션. 트윗(`kind:"tweet"`)은 `category` 포함(분류: Haiku). 뉴스(`kind:"news"`)는 `title`(lang별)·`category`·`source`(퍼블리셔명) 포함. |
 | GET | `/api/governance` | — | `governance` | `{proposals: [{id, title, status, url}, ...]}` |
 | GET | `/api/analytics/realtime-prices` | — | `realtime_prices` | `{exchanges: [{name, price, volume_24h, ts}, ...]}` |
 | GET | `/api/analytics/exchanges` | — | `exchanges` | `{cex: [...], dex: [...]}` |
@@ -207,7 +211,8 @@ api/main.py
 | `network` | 300s | `collect_network` | 300s | `/api/network` |
 | `network_status` | 3600s | `collect_network` | 300s | `/api/network/status` |
 | `chart:{type}:{period}` | 900s | `collect_charts` | 900s | `/api/chart/{type}` |
-| `feed:{lang}` | 900s | `collect_feed` | 900s | `/api/feed` |
+| `feed:{lang}` | 900s | `collect_feed` | 900s | `/api/feed` — `{lang, ai_summary, fetched_at}`만 보관 (items 미포함) |
+| `tweet:items` | 46800s | `collect_feed` | 900s | `/api/feed` — 링버퍼(최대 200, url 기준 중복 제거), 항목마다 `category` 포함(Haiku 분류) |
 | `governance` | 3600s | `collect_governance` | 3600s | `/api/governance` |
 | `exchanges` | 900s | `collect_exchanges` | 900s | `/api/analytics/exchanges` |
 | `realtime_prices` | 10s | `collect_realtime_prices` | 5s | `/api/analytics/realtime-prices` |
@@ -229,3 +234,4 @@ api/main.py
 | Date | Change | Reason |
 |------|--------|--------|
 | 2026-04-15 | Initial creation | Generated via `docs-init` skill |
+| 2026-05-30 | 피드 v2 반영: `tweet:items` 캐시 키 추가, `feed:{lang}` ai_summary 전용으로 변경, `/api/feed` 페이지네이션·트윗분류 문서화, `data/tweet_items.json` 링버퍼 기록 | feat/feed-v2-categorize-paginate |
