@@ -16,6 +16,7 @@ import type {
   KrCompaniesData,
   TrendingData,
   KpiHistoryData,
+  FundingRates,
 } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -104,5 +105,12 @@ export function useTrending() {
 export function useKpiHistory() {
   return useSWR<KpiHistoryData>(`${API}/api/analytics/kpi-history`, fetcher, {
     refreshInterval: 600_000, // 10min
+  });
+}
+
+export function useFundingRates() {
+  return useSWR<FundingRates>(`${API}/api/analytics/funding-rates`, fetcher, {
+    refreshInterval: 30_000,
+    fallbackData: { rates: [], updated_at: null },
   });
 }
