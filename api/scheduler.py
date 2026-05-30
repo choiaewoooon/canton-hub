@@ -869,16 +869,15 @@ async def collect_holders(cache: TTLCache):
 
 
 async def collect_trending(cache: TTLCache):
-    """Aggregate top trending keywords from cached Canton tweets.
+    """Aggregate top trending keywords from accumulated Canton tweets.
 
-    Pulls from the English feed (most content) and falls back across languages.
-    Emits a list of {keyword, count, last_seen} sorted by frequency. Runs after
-    collect_feed so it consumes the latest tweets.
+    v2: 트윗이 feed:{lang}.items에서 tweet:items 링버퍼로 이동했으므로 그쪽을 읽는다.
+    Emits a list of {keyword, count, last_seen(=ts ISO)} sorted by frequency.
+    Runs after collect_feed so it consumes the latest tweets.
     """
     import re
 
-    feed = cache.get("feed:en") or cache.get("feed:ko") or {}
-    items = feed.get("items", [])
+    items = cache.get("tweet:items") or []
     if not items:
         cache.set("analytics:trending", {"keywords": [], "fetched_at": None}, ttl=3600)
         return
@@ -887,7 +886,7 @@ async def collect_trending(cache: TTLCache):
     last_seen: dict[str, str] = {}
     for it in items:
         text = (it.get("text") or "").lower()
-        time_ago = it.get("time_ago", "")
+        seen_at = it.get("ts", "")  # tweet:items에는 time_ago가 없고 ts(ISO)가 있음
         # Extract cashtags, hashtags, and meaningful words (len >= 4)
         tokens = re.findall(r"[#$]?[a-z][a-z0-9_]{3,}", text)
         for tok in tokens:
@@ -900,7 +899,7 @@ async def collect_trending(cache: TTLCache):
                     continue
                 kw = tok
             counter[kw] += 1
-            last_seen.setdefault(kw, time_ago)
+            last_seen.setdefault(kw, seen_at)
 
     top = counter.most_common(10)
     keywords = [
