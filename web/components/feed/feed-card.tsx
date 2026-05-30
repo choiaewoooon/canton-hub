@@ -3,6 +3,7 @@
 import { useFeed } from "@/lib/api";
 import { relativeTime, kstTimestamp } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
+import { categoryLabel, categoryClass } from "@/components/feed/news-category";
 
 interface FeedCardProps {
   lang: string;
@@ -48,13 +49,21 @@ export default function FeedCard({ lang }: FeedCardProps) {
         visibleItems.map((item, i) => (
           <div key={i} className={`py-2.5 ${i < visibleItems.length - 1 ? "border-b border-canton-border" : ""}`}>
             <div className="flex items-center gap-1.5 text-[10px] text-zinc-600 uppercase tracking-wider mb-1">
+              {item.kind === "news" && (
+                <span className={`px-1.5 py-0.5 rounded normal-case tracking-normal ${categoryClass(item.category)}`}>
+                  {categoryLabel(item.category, lang)}
+                </span>
+              )}
               {item.source}
               <span className="text-zinc-700 normal-case tracking-normal" title={kstTimestamp(item.ts)}>
                 {item.ts ? relativeTime(item.ts, lang, now) : item.time_ago}
               </span>
             </div>
-            <a href={item.url} target="_blank" rel="noopener" className="text-[13px] text-zinc-400 leading-relaxed hover:text-zinc-300 transition">
-              {item.text}
+            <a href={item.url} target="_blank" rel="noopener" className="block hover:text-zinc-300 transition">
+              {item.kind === "news" && item.title && (
+                <span className="block text-[13px] font-semibold text-zinc-300 leading-snug">{item.title}</span>
+              )}
+              <span className="text-[13px] text-zinc-400 leading-relaxed">{item.text}</span>
             </a>
           </div>
         ))
