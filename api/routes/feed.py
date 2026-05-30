@@ -1,5 +1,7 @@
 # api/routes/feed.py
-"""Feed endpoint — 트위터 + 미디어(RSS) 통합 타임라인."""
+"""Feed endpoint — 트위터 + 미디어(RSS) 통합 타임라인 + 페이지네이션."""
+import math
+
 from fastapi import APIRouter, Depends
 from api.cache import TTLCache
 from api.dependencies import get_cache
@@ -7,21 +9,33 @@ from api.dependencies import get_cache
 router = APIRouter(prefix="/api")
 
 SUPPORTED_LANGS = {"ko", "en", "ja", "zh"}
-_MERGED_MAX = 25
+PAGE_SIZE = 10
 
 
 def _pick(d: dict, lang: str) -> str:
-    """언어별 필드 선택, 없으면 en 폴백, 그것도 없으면 빈 문자열."""
     if not isinstance(d, dict):
         return ""
     return d.get(lang) or d.get("en") or ""
+
+
+def _tweet_to_item(t: dict) -> dict:
+    return {
+        "kind": "tweet",
+        "source": t.get("source", ""),
+        "time_ago": "",
+        "ts": t.get("ts", ""),
+        "text": t.get("text", ""),
+        "url": t.get("url", ""),
+        "title": None,
+        "category": t.get("category", "other"),
+    }
 
 
 def _media_to_item(rec: dict, lang: str) -> dict:
     return {
         "kind": "news",
         "source": rec.get("publisher", ""),
-        "time_ago": "",  # 프론트가 ts로 계산
+        "time_ago": "",
         "ts": rec.get("ts", ""),
         "text": _pick(rec.get("summary", {}), lang),
         "url": rec.get("url", ""),
@@ -31,22 +45,31 @@ def _media_to_item(rec: dict, lang: str) -> dict:
 
 
 @router.get("/feed")
-async def get_feed(lang: str = "en", cache: TTLCache = Depends(get_cache)):
+async def get_feed(lang: str = "en", page: int = 1, cache: TTLCache = Depends(get_cache)):
     if lang not in SUPPORTED_LANGS:
         lang = "en"
-    feed = cache.get(f"feed:{lang}") or {"items": [], "ai_summary": "", "fetched_at": None}
+    if page < 1:
+        page = 1
 
-    tweets = [{**t, "kind": t.get("kind", "tweet")} for t in feed.get("items", [])]
-    media = cache.get("media:items") or []
-    news = [_media_to_item(r, lang) for r in media]
+    summary = cache.get(f"feed:{lang}") or {}
+    tweets = [_tweet_to_item(t) for t in (cache.get("tweet:items") or [])]
+    news = [_media_to_item(r, lang) for r in (cache.get("media:items") or [])]
 
     merged = tweets + news
     merged.sort(key=lambda x: x.get("ts") or "", reverse=True)
-    merged = merged[:_MERGED_MAX]
+
+    total = len(merged)
+    total_pages = math.ceil(total / PAGE_SIZE) if total else 0
+    start = (page - 1) * PAGE_SIZE
+    items = merged[start:start + PAGE_SIZE]
 
     return {
         "lang": lang,
-        "items": merged,
-        "ai_summary": feed.get("ai_summary", ""),
-        "fetched_at": feed.get("fetched_at"),
+        "items": items,
+        "ai_summary": summary.get("ai_summary", ""),
+        "fetched_at": summary.get("fetched_at"),
+        "page": page,
+        "page_size": PAGE_SIZE,
+        "total": total,
+        "total_pages": total_pages,
     }
