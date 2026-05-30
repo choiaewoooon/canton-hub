@@ -38,8 +38,8 @@ export function useChart(type: string, period: string) {
   return useSWR<ChartPoint[]>(`${API}/api/chart/${type}?period=${period}`, fetcher, { refreshInterval: 300_000 });
 }
 
-export function useFeed(lang: string) {
-  return useSWR<FeedData>(`${API}/api/feed?lang=${lang}`, fetcher, { refreshInterval: 900_000 });
+export function useFeed(lang: string, page: number = 1) {
+  return useSWR<FeedData>(`${API}/api/feed?lang=${lang}&page=${page}`, fetcher, { refreshInterval: 900_000 });
 }
 
 export function useGovernance() {

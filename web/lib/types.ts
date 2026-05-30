@@ -51,7 +51,7 @@ export interface FeedItem {
   ts?: string; // ISO UTC — 프론트에서 상대시간 실시간 계산용 (time_ago는 폴백)
   text: string; // tweet=본문 / news=번역된 한줄 요약
   url: string;
-  title?: string; // news 헤드라인(번역본). tweet은 없음
+  title?: string | null; // news 헤드라인(번역본). tweet은 없음(null)
   category?: string; // news 유형 key. tweet은 없음
 }
 
@@ -59,7 +59,11 @@ export interface FeedData {
   lang: string;
   items: FeedItem[];
   ai_summary: string;
-  fetched_at?: string | null; // ISO UTC — 마지막 수집 시각
+  fetched_at?: string | null;
+  page?: number;
+  page_size?: number;
+  total?: number;
+  total_pages?: number;
 }
 
 export interface CIPItem {
