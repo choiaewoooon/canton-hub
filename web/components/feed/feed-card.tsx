@@ -48,8 +48,9 @@ export default function FeedCard({ lang }: FeedCardProps) {
       {visibleItems.length > 0 ? (
         visibleItems.map((item, i) => (
           <div key={i} className={`py-2.5 ${i < visibleItems.length - 1 ? "border-b border-canton-border" : ""}`}>
-            <div className="flex items-center gap-1.5 text-[10px] text-zinc-600 uppercase tracking-wider mb-1">
-              {item.kind === "news" && (
+            <div className="flex items-center gap-1.5 text-[10px] text-zinc-600 uppercase tracking-wider mb-1 flex-wrap">
+              <span className="normal-case tracking-normal">{item.kind === "news" ? "📰" : "🐦"}</span>
+              {item.category && item.category !== "other" && (
                 <span className={`px-1.5 py-0.5 rounded normal-case tracking-normal ${categoryClass(item.category)}`}>
                   {categoryLabel(item.category, lang)}
                 </span>
