@@ -14,9 +14,9 @@ const RISK_META: Record<
 };
 
 function fmtKrwEok(n: number | null): string {
-    // 억원 단위 (1e8). null → "—".
+    // 억원 단위 (1e8) 절대값. 부호는 호출부에서 ▲▼로 표기. null → "—".
     if (n == null) return "—";
-    return `₩${(n / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}억`;
+    return `₩${(Math.abs(n) / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}억`;
 }
 
 export default function CompanyCard({ c }: { c: DatCompany }) {
@@ -87,7 +87,7 @@ export default function CompanyCard({ c }: { c: DatCompany }) {
                 </div>
                 {c.pl_krw != null && (
                     <div style={{ fontSize: 12, color: "var(--zinc-500)", marginTop: 2 }}>
-                        ≈ {fmtKrwEok(c.pl_krw)}원
+                        ≈ {plArrow} {fmtKrwEok(c.pl_krw)}
                     </div>
                 )}
             </div>
