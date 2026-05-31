@@ -1,25 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  BadgeDelta,
-  Callout,
-  Card,
-  Grid,
-  Metric,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeaderCell,
-  TableRow,
-  Text,
-  Title,
-} from "@tremor/react";
 import { useFundingRates, useRealtimePrices } from "@/lib/api";
 import type { FundingRate, LivePrice } from "@/lib/types";
 import { formatAgo, formatDuration, fmtLargeUsd } from "@/lib/format";
 import { makeT } from "./funding-rate-matrix.i18n";
+
+// ---------------------------------------------------------------------------
+// Toss-style color helpers
+// Korean convention: positive = RED, negative = BLUE
+// ---------------------------------------------------------------------------
+
+const valClass = (n: number) => (n >= 0 ? "text-rose-400" : "text-sky-400");
+const arrow = (n: number) => (n >= 0 ? "▲" : "▼");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -163,7 +156,7 @@ function Countdown({ targetTs, lang }: { targetTs: number; lang: string }) {
     return () => clearInterval(id);
   }, [targetTs]);
 
-  return <span className="text-[11px] text-zinc-300">{formatDuration(remaining, lang, true)}</span>;
+  return <span className="text-[11px] text-zinc-300 tabular-nums">{formatDuration(remaining, lang, true)}</span>;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,14 +186,12 @@ function LastUpdated({
   const isStale = secondsAgo > 300;
 
   return (
-    <div className="mt-3 pt-3 border-t border-canton-border">
-      <p className="text-[11px] text-zinc-600">
+    <div className="mt-3 pt-3 border-t border-canton-border/60">
+      <p className="text-[11px] text-zinc-500">
         {t("lastUpdated")}: {formatAgo(secondsAgo, lang)}
       </p>
       {isStale && (
-        <div className="mt-2 flex items-center gap-2 rounded-md bg-yellow-400/10 border border-yellow-400/30 px-3 py-2">
-          <span className="text-[12px] text-yellow-400 font-semibold">{t("staleWarning")}</span>
-        </div>
+        <p className="mt-1 text-[11px] text-amber-400">{t("staleWarning")}</p>
       )}
     </div>
   );
@@ -223,86 +214,83 @@ function RecommendationCards({
 
   const allNegative = sorted.length > 0 && sorted[0].fr_apr <= 0;
 
-  if (allNegative) {
+  if (allNegative || (!perpPair && !spotPerpPair)) {
     return (
-      <div className="mb-4 flex items-center gap-2 rounded-md bg-zinc-800/60 border border-canton-border px-4 py-3">
+      <div className="mb-4 rounded-2xl bg-zinc-900/50 border border-canton-border/60 px-4 py-3">
         <span className="text-[12px] text-zinc-400">{t("noArbitrage")}</span>
       </div>
     );
   }
 
-  if (!perpPair && !spotPerpPair) return null;
-
   return (
-    <Grid numItems={1} numItemsSm={2} className="gap-3 mb-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
       {perpPair && (
-        <Card className="bg-zinc-900/50 border-canton-border p-3">
-          <div className="text-[12px] font-semibold text-zinc-200 mb-2">{t("perpPerpTitle")}</div>
-          <Metric className="text-canton-up text-[22px] leading-none mb-2">
-            {perpPair.apr >= 0 ? "+" : ""}
-            {perpPair.apr.toFixed(1)}% APR
-          </Metric>
-          <div className="text-[11px] text-zinc-400 space-y-0.5">
-            <div>
-              <span className="text-zinc-600">{t("shortLabel")}: </span>
-              <span className="text-zinc-200 font-medium">{perpPair.short.source}</span>
+        <div className="rounded-2xl bg-zinc-900/50 border border-canton-border/60 p-5">
+          <div className="text-[12px] text-zinc-400 mb-2">{t("perpPerpTitle")}</div>
+          <div className={`text-[28px] font-bold tabular-nums ${valClass(perpPair.apr)} leading-none mb-3`}>
+            {arrow(perpPair.apr)} {Math.abs(perpPair.apr).toFixed(1)}%
+            <span className="text-[12px] font-medium text-zinc-500 ml-1.5">APR</span>
+          </div>
+          <div className="space-y-1.5 text-[13px]">
+            <div className="flex justify-between">
+              <span className="text-zinc-500">{t("shortLabel")}</span>
+              <span className="font-medium text-zinc-200">{perpPair.short.source}</span>
             </div>
-            <div>
-              <span className="text-zinc-600">{t("longLabel")}: </span>
-              <span className="text-zinc-200 font-medium">{perpPair.long.source}</span>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">{t("longLabel")}</span>
+              <span className="font-medium text-zinc-200">{perpPair.long.source}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">{t("entrySpread")}</span>
+              <span className="tabular-nums text-zinc-300">{perpPair.entry_spread_pct.toFixed(3)}%</span>
             </div>
           </div>
-          <div className="mt-2 pt-2 border-t border-canton-border/50 text-[10px] text-zinc-600 space-y-0.5">
-            <div>
-              {t("entrySpread")}: {perpPair.entry_spread_pct.toFixed(3)}%
+          {perpPair.liquidity_min_usd > 0 && (
+            <div className="flex justify-between text-[12px] mt-1.5">
+              <span className="text-zinc-500">{t("orderbookDepth")}</span>
+              <span className="tabular-nums text-zinc-300">{fmtLargeUsd(perpPair.liquidity_min_usd)}</span>
             </div>
-            {perpPair.liquidity_min_usd > 0 && (
-              <div>
-                {t("orderbookDepth")}: {fmtLargeUsd(perpPair.liquidity_min_usd)}
-              </div>
-            )}
-            <div className="flex items-center gap-1">
-              <span>{t("colNextFunding")}:</span>
-              <Countdown targetTs={perpPair.short.next_funding_ts} lang={lang} />
-            </div>
+          )}
+          <div className="mt-3 pt-3 border-t border-canton-border/60 flex items-center justify-between text-[12px] text-zinc-500">
+            <span>{t("colNextFunding")}</span>
+            <Countdown targetTs={perpPair.short.next_funding_ts} lang={lang} />
           </div>
-        </Card>
+        </div>
       )}
       {spotPerpPair && (
-        <Card className="bg-zinc-900/50 border-canton-border p-3">
-          <div className="text-[12px] font-semibold text-zinc-200 mb-2">{t("spotPerpTitle")}</div>
-          <Metric className="text-canton-up text-[22px] leading-none mb-2">
-            {spotPerpPair.apr >= 0 ? "+" : ""}
-            {spotPerpPair.apr.toFixed(1)}% APR
-          </Metric>
-          <div className="text-[11px] text-zinc-400 space-y-0.5">
-            <div>
-              <span className="text-zinc-600">{t("spotBuyLabel")}: </span>
-              <span className="text-zinc-200 font-medium">{spotPerpPair.spotSource}</span>
+        <div className="rounded-2xl bg-zinc-900/50 border border-canton-border/60 p-5">
+          <div className="text-[12px] text-zinc-400 mb-2">{t("spotPerpTitle")}</div>
+          <div className={`text-[28px] font-bold tabular-nums ${valClass(spotPerpPair.apr)} leading-none mb-3`}>
+            {arrow(spotPerpPair.apr)} {Math.abs(spotPerpPair.apr).toFixed(1)}%
+            <span className="text-[12px] font-medium text-zinc-500 ml-1.5">APR</span>
+          </div>
+          <div className="space-y-1.5 text-[13px]">
+            <div className="flex justify-between">
+              <span className="text-zinc-500">{t("spotBuyLabel")}</span>
+              <span className="font-medium text-zinc-200">{spotPerpPair.spotSource}</span>
             </div>
-            <div>
-              <span className="text-zinc-600">{t("shortLabel")}: </span>
-              <span className="text-zinc-200 font-medium">{spotPerpPair.short.source}</span>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">{t("shortLabel")}</span>
+              <span className="font-medium text-zinc-200">{spotPerpPair.short.source}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">{t("basis")}</span>
+              <span className="tabular-nums text-zinc-300">{spotPerpPair.entry_spread_pct.toFixed(3)}%</span>
             </div>
           </div>
-          <div className="mt-2 pt-2 border-t border-canton-border/50 text-[10px] text-zinc-600 space-y-0.5">
-            <div>
-              {t("basis")}: {spotPerpPair.entry_spread_pct >= 0 ? "+" : ""}
-              {spotPerpPair.entry_spread_pct.toFixed(3)}%
+          {spotPerpPair.liquidity_min_usd > 0 && (
+            <div className="flex justify-between text-[12px] mt-1.5">
+              <span className="text-zinc-500">{t("orderbookDepth")}</span>
+              <span className="tabular-nums text-zinc-300">{fmtLargeUsd(spotPerpPair.liquidity_min_usd)}</span>
             </div>
-            {spotPerpPair.liquidity_min_usd > 0 && (
-              <div>
-                {t("orderbookDepth")}: {fmtLargeUsd(spotPerpPair.liquidity_min_usd)}
-              </div>
-            )}
-            <div className="flex items-center gap-1">
-              <span>{t("colNextFunding")}:</span>
-              <Countdown targetTs={spotPerpPair.short.next_funding_ts} lang={lang} />
-            </div>
+          )}
+          <div className="mt-3 pt-3 border-t border-canton-border/60 flex items-center justify-between text-[12px] text-zinc-500">
+            <span>{t("colNextFunding")}</span>
+            <Countdown targetTs={spotPerpPair.short.next_funding_ts} lang={lang} />
           </div>
-        </Card>
+        </div>
       )}
-    </Grid>
+    </div>
   );
 }
 
@@ -324,78 +312,78 @@ function FundingRateTable({
   const sorted = [...rates].sort((a, b) => b.fr_apr - a.fr_apr);
 
   return (
-    <Table>
-      <TableHead>
-        <TableRow>
-          <TableHeaderCell className="text-[11px] text-zinc-500">{t("colExchange")}</TableHeaderCell>
-          <TableHeaderCell className="text-[11px] text-zinc-500">{t("colFrRaw")}</TableHeaderCell>
-          <TableHeaderCell className="text-[11px] text-zinc-500">{t("colApr")}</TableHeaderCell>
-          <TableHeaderCell className="text-[11px] text-zinc-500">{t("colNextFunding")}</TableHeaderCell>
-          <TableHeaderCell className="text-[11px] text-zinc-500">{t("colTrade")}</TableHeaderCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {sorted.map((r) => {
-          const frRawPct = (r.fr_raw * 100).toFixed(4);
-          const frSign = r.fr_raw >= 0 ? "+" : "";
-          const aprSign = r.fr_apr >= 0 ? "+" : "";
+    <div className="w-full">
+      {/* Header row */}
+      <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-1 pb-2 border-b border-canton-border/60">
+        <span className="text-[11px] text-zinc-500">{t("colExchange")}</span>
+        <span className="text-[11px] text-zinc-500 text-right">{t("colFrRaw")}</span>
+        <span className="text-[11px] text-zinc-500 text-right">{t("colApr")}</span>
+        <span className="text-[11px] text-zinc-500 text-right">{t("colNextFunding")}</span>
+        <span className="text-[11px] text-zinc-500 text-right">{t("colTrade")}</span>
+      </div>
 
-          // Find trade_url from matching prices entry (perp market for this source)
-          const priceEntry = prices.find(
-            (p) => p.source === r.source && p.market === "perpetual"
-          );
-          const tradeUrl = priceEntry?.trade_url;
+      {/* Data rows */}
+      {sorted.map((r) => {
+        const frRawPct = (r.fr_raw * 100).toFixed(4);
 
-          return (
-            <TableRow key={r.source} className="hover:bg-zinc-900/40 transition">
-              {/* Exchange */}
-              <TableCell>
-                <div className="text-[12px] text-zinc-200 font-medium">{r.source}</div>
-                <div className="text-[9px] text-zinc-600 uppercase">
-                  {r.venue_type} · {r.period_hours}h
-                </div>
-              </TableCell>
+        // Find trade_url from matching prices entry (perp market for this source)
+        const priceEntry = prices.find(
+          (p) => p.source === r.source && p.market === "perpetual"
+        );
+        const tradeUrl = priceEntry?.trade_url;
 
-              {/* FR raw */}
-              <TableCell>
-                <span className={`text-[11px] font-mono ${r.fr_raw >= 0 ? "text-canton-up" : "text-canton-down"}`}>
-                  {frSign}{frRawPct}%
-                </span>
-                <span className="text-[9px] text-zinc-700 ml-1">/{r.period_hours}h</span>
-              </TableCell>
+        return (
+          <div
+            key={r.source}
+            className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 items-center px-1 py-3.5 border-b border-canton-border/60 hover:bg-zinc-900/40 transition-colors"
+          >
+            {/* Exchange */}
+            <div>
+              <div className="text-[13px] text-zinc-100 font-semibold">{r.source}</div>
+              <div className="text-[11px] text-zinc-500 uppercase mt-0.5">
+                {r.venue_type} · {r.period_hours}H
+              </div>
+            </div>
 
-              {/* APR with BadgeDelta */}
-              <TableCell>
-                <BadgeDelta deltaType={r.fr_apr >= 0 ? "increase" : "decrease"} size="xs">
-                  {aprSign}{r.fr_apr.toFixed(1)}%
-                </BadgeDelta>
-              </TableCell>
+            {/* FR raw */}
+            <div className="text-right">
+              <span className={`text-[12px] tabular-nums font-mono ${valClass(r.fr_raw)}`}>
+                {arrow(r.fr_raw)}&thinsp;{frRawPct}%
+              </span>
+              <span className="text-[11px] text-zinc-600 ml-0.5">/{r.period_hours}h</span>
+            </div>
 
-              {/* Countdown */}
-              <TableCell>
-                <Countdown targetTs={r.next_funding_ts} lang={lang} />
-              </TableCell>
+            {/* APR — clean colored text, no BadgeDelta */}
+            <div className="text-right">
+              <span className={`text-[15px] font-bold tabular-nums ${valClass(r.fr_apr)}`}>
+                {arrow(r.fr_apr)}&thinsp;{Math.abs(r.fr_apr).toFixed(1)}%
+              </span>
+            </div>
 
-              {/* Trade link */}
-              <TableCell>
-                {tradeUrl ? (
-                  <a
-                    href={tradeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-canton-lime hover:underline"
-                  >
-                    {t("colTrade")}
-                  </a>
-                ) : (
-                  <span className="text-[11px] text-zinc-700">—</span>
-                )}
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+            {/* Countdown */}
+            <div className="text-right text-zinc-400">
+              <Countdown targetTs={r.next_funding_ts} lang={lang} />
+            </div>
+
+            {/* Trade link */}
+            <div className="text-right">
+              {tradeUrl ? (
+                <a
+                  href={tradeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[12px] text-zinc-500 hover:text-canton-lime transition-colors"
+                >
+                  Trade ↗
+                </a>
+              ) : (
+                <span className="text-[12px] text-zinc-700">—</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
