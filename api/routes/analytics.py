@@ -62,6 +62,20 @@ async def kr_companies(cache: TTLCache = Depends(get_cache)):
     }
 
 
+def _empty_dat():
+    return {"companies": [], "company_count": 0, "total_cc_holdings": 0,
+            "total_pl_usd": 0, "fetched_at": None}
+
+
+@router.get("/dat")
+async def dat(cache: TTLCache = Depends(get_cache)):
+    """Canton DAT 트래커 — $CC 보유 상장사 현황."""
+    data = cache.get("analytics:dat")
+    if data is None:
+        return _empty_dat()
+    return data
+
+
 @router.get("/holders")
 async def holders(cache: TTLCache = Depends(get_cache)):
     """Major CC Holders — CantonScan 온체인 balance 기반 top holders."""
