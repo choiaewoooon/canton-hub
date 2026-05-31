@@ -70,3 +70,125 @@ def classify_risk(mnav: Optional[float]) -> Optional[str]:
     if mnav >= MNAV_NAV_FLOOR:
         return "watch"
     return "below_nav"
+
+
+_HTTP_HEADERS = {
+    # Yahoo's chart endpoint 429s requests without a browser-like UA.
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "application/json",
+}
+
+
+def _load_companies() -> list[dict]:
+    """data/dat_companies.json 로드. 부재/손상 시 빈 리스트."""
+    if not _COMPANIES_FILE.exists():
+        return []
+    try:
+        data = json.loads(_COMPANIES_FILE.read_text())
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.warning(f"dat_companies.json load failed: {e}")
+        return []
+
+
+async def _fetch_stock(client: httpx.AsyncClient, ticker: str) -> tuple[Optional[float], Optional[float]]:
+    """Yahoo Finance chart 엔드포인트로 (현재가, 시총) 조회. 시총은 응답에 없으면 None."""
+    try:
+        url = f"{config.YAHOO_FINANCE_CHART_URL}/{ticker}"
+        r = await client.get(url, params={"interval": "1d", "range": "1d"}, timeout=10)
+        if r.status_code != 200:
+            logger.warning(f"Yahoo {ticker} status {r.status_code}")
+            return None, None
+        meta = (r.json().get("chart", {}).get("result") or [{}])[0].get("meta", {})
+        price = meta.get("regularMarketPrice")
+        return (float(price) if price is not None else None), None
+    except Exception as e:
+        logger.warning(f"Yahoo fetch failed for {ticker}: {e}")
+        return None, None
+
+
+async def _fetch_krw_rate(client: httpx.AsyncClient) -> Optional[float]:
+    """USD/KRW 환율. 실패 시 None."""
+    try:
+        r = await client.get(config.EXCHANGERATE_API_URL, timeout=10)
+        if r.status_code == 200:
+            return float(r.json().get("rates", {}).get("KRW"))
+    except Exception as e:
+        logger.warning(f"KRW rate fetch failed: {e}")
+    return None
+
+
+async def collect_dat(cc_price: Optional[float]) -> dict:
+    """DAT 트래커 수집. cc_price는 호출자(scheduler)가 cache의 $CC 현재가를 주입.
+
+    각 기업: 정적값(JSON) + 라이브(주가/시총/환율) + 계산(nav/mnav/pl/risk).
+    """
+    companies = _load_companies()
+    out_companies: list[dict] = []
+
+    async with httpx.AsyncClient(headers=_HTTP_HEADERS) as client:
+        krw_rate = await _fetch_krw_rate(client)
+
+        for co in companies:
+            ticker = co.get("ticker", "")
+            stock_price, market_cap = await _fetch_stock(client, ticker)
+
+            # 시총이 응답에 없으면 주가 × 발행주식수로 폴백
+            shares = co.get("shares_outstanding") or 0
+            if market_cap is None and stock_price is not None and shares:
+                market_cap = stock_price * shares
+
+            cc_holdings = co.get("cc_holdings") or 0
+            avg_buy = co.get("avg_buy_price") or 0
+            debt = co.get("debt") or 0
+            cash = co.get("cash") or 0
+
+            nav = compute_nav(cc_holdings, cc_price) if cc_price else 0.0
+            mnav, mnav_label = compute_mnav(market_cap, debt, cash, nav)
+            pl_usd, pl_pct = compute_pl(cc_price, avg_buy, cc_holdings) if cc_price else (None, None)
+            risk = classify_risk(mnav)
+
+            value_usd = nav if nav else None
+            out_companies.append({
+                **co,
+                "stock_price": stock_price,
+                "market_cap": market_cap,
+                "cc_price": cc_price,
+                "nav": nav or None,
+                "mnav": mnav,
+                "mnav_label": mnav_label,
+                "pl_usd": pl_usd,
+                "pl_pct": pl_pct,
+                "krw_rate": krw_rate,
+                "value_krw": (value_usd * krw_rate) if (value_usd and krw_rate) else None,
+                "pl_krw": (pl_usd * krw_rate) if (pl_usd is not None and krw_rate) else None,
+                "risk": risk,
+            })
+
+    result = {
+        "companies": out_companies,
+        "company_count": len(out_companies),
+        "total_cc_holdings": sum((c.get("cc_holdings") or 0) for c in out_companies),
+        "total_pl_usd": sum((c.get("pl_usd") or 0) for c in out_companies),
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        _CACHE_FILE.parent.mkdir(exist_ok=True)
+        _CACHE_FILE.write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    except Exception as e:
+        logger.warning(f"DAT cache save failed: {e}")
+
+    logger.info(f"DAT collected: {len(out_companies)} companies, krw_rate={krw_rate}")
+    return result
+
+
+def load_cached_dat() -> Optional[dict]:
+    """파일 캐시 폴백 로드."""
+    if not _CACHE_FILE.exists():
+        return None
+    try:
+        return json.loads(_CACHE_FILE.read_text())
+    except Exception:
+        return None
