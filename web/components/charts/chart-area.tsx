@@ -140,14 +140,14 @@ export default function ChartArea() {
 
   return (
     <div className="bg-canton-card border border-canton-border rounded-[10px] p-4 mb-5">
-      {/* Header: tabs + period filter */}
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex gap-0 border-b border-canton-border">
+      {/* Header: tabs + period filter — mobile: tabs scroll, period toggle drops below */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center mb-4">
+        <div className="flex gap-0 border-b border-canton-border overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-xs border-b-2 transition ${
+              className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 text-xs border-b-2 transition ${
                 activeTab === tab.key
                   ? "border-current"
                   : "border-transparent text-zinc-600 hover:text-zinc-400"
@@ -163,12 +163,12 @@ export default function ChartArea() {
           ))}
         </div>
         {!isPrivateTab && (
-          <div className="flex gap-0.5 bg-zinc-900 rounded-md p-0.5">
+          <div className="flex gap-0.5 bg-zinc-900 rounded-md p-0.5 self-start sm:self-auto shrink-0">
             {PERIODS.map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`text-[11px] px-2 py-1 rounded ${
+                className={`text-[11px] px-3 py-1.5 rounded ${
                   period === p ? "bg-zinc-800 text-zinc-50" : "text-zinc-500"
                 }`}
               >

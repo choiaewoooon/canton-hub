@@ -22,12 +22,12 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-canton-bg flex flex-col">
       <Navbar lang={lang} onLangChange={setLang} connected={connected} />
-      <main className="max-w-[1200px] w-full mx-auto px-6 py-5 flex-1">
+      <main className="max-w-[1200px] w-full mx-auto px-4 sm:px-6 py-5 flex-1">
         <HeroPrice data={realtimePrice} />
         <KpiGrid data={networkData} />
         <ChartArea />
         <BmSection network={networkData} />
-        <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
           <FeedCard lang={lang} />
           <div>
             <NetworkStatusCard />

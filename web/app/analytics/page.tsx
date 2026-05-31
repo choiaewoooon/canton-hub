@@ -23,20 +23,20 @@ export default function AnalyticsPage() {
   return (
     <div className="min-h-screen bg-canton-bg flex flex-col">
       <Navbar lang={lang} onLangChange={setLang} connected={connected} />
-      <main className="max-w-[1200px] w-full mx-auto px-6 py-5 flex-1">
+      <main className="max-w-[1200px] w-full mx-auto px-4 sm:px-6 py-5 flex-1">
         <ArbitrageTracker lang={lang} />
         <FundingRateMatrix lang={lang} />
         <div className="mt-5">
           <ExchangesSection lang={lang} />
         </div>
-        <div className="grid grid-cols-2 gap-3 mt-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-5">
           <RewardSplitChart lang={lang} />
           <AmuletPriceChart lang={lang} />
         </div>
         <div className="mt-5">
           <CumulativeChart lang={lang} />
         </div>
-        <div className="grid grid-cols-2 gap-3 mt-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-5">
           <BurnBreakdown lang={lang} />
           <MajorHolders lang={lang} />
         </div>
