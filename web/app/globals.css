@@ -391,11 +391,15 @@ select.ch-btn-nav { padding: 5px 8px; outline: none; font-family: inherit; }
 }
 .ch-mnav-gauge .axis { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; font-size: 9px; color: var(--zinc-600); }
 
-.ch-dat-chart-row { padding: 16px 18px; border-top: 1px solid var(--canton-border); }
+.ch-dat-charts { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--canton-border); }
+.ch-dat-charts .ch-dat-chart-row:first-child { border-right: 1px solid var(--canton-border); }
+.ch-dat-chart-row { padding: 16px 18px; }
 .ch-dat-chart-row .ch-card-title { margin-bottom: 10px; }
 
 @media (max-width: 860px) {
   .ch-dat-grid { grid-template-columns: 1fr; }
+  .ch-dat-charts { grid-template-columns: 1fr; }
+  .ch-dat-charts .ch-dat-chart-row:first-child { border-right: none; border-bottom: 1px solid var(--canton-border); }
 }
 
 .ch-priv-bar-wrap { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }

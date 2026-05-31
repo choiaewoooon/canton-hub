@@ -293,6 +293,11 @@ export interface DatMnavPoint {
   mnav: number;
 }
 
+export interface DatPricePoint {
+  ts: string;
+  close: number;
+}
+
 export interface DatCompany {
   ticker: string;
   name: string;
@@ -319,6 +324,7 @@ export interface DatCompany {
   pl_krw: number | null;
   risk: "healthy" | "watch" | "below_nav" | null;
   mnav_history: DatMnavPoint[];
+  price_history: DatPricePoint[];
 }
 
 export interface DatData {

@@ -3,6 +3,14 @@
 import type { DatCompany } from "@/lib/types";
 import { fmtUsd, fmtCc, fmtPct, fmtLargeUsd } from "@/lib/format";
 import MnavChart from "./mnav-chart";
+import PriceChart from "./price-chart";
+
+const T: Record<string, Record<string, string>> = {
+    stockChart: { ko: "주가 추이 (6개월)", en: "Stock Price (6M)", ja: "株価推移 (6ヶ月)", zh: "股价走势 (6个月)" },
+    mnavChart: { ko: "mNAV 추이", en: "mNAV History", ja: "mNAV推移", zh: "mNAV走势" },
+    pl: { ko: "실시간 평가손익", en: "Real-time P/L", ja: "リアルタイム損益", zh: "实时盈亏" },
+};
+const tr = (k: string, lang: string) => T[k]?.[lang] ?? T[k]?.en ?? k;
 
 const RISK_META: Record<
     string,
@@ -34,7 +42,7 @@ function MnavGauge({ mnav, color }: { mnav: number | null; color: string }) {
     );
 }
 
-export default function CompanyCard({ c }: { c: DatCompany }) {
+export default function CompanyCard({ c, lang = "en" }: { c: DatCompany; lang?: string }) {
     const plPositive = (c.pl_usd ?? 0) >= 0;
     const plColor = plPositive ? "var(--canton-up)" : "var(--canton-down)";
     const plArrow = plPositive ? "▲" : "▼";
@@ -90,7 +98,7 @@ export default function CompanyCard({ c }: { c: DatCompany }) {
 
                 {/* P/L */}
                 <div className="ch-dat-cell">
-                    <div className="ch-eyebrow">Real-time P/L</div>
+                    <div className="ch-eyebrow">{tr("pl", lang)}</div>
                     <div className="big" style={{ color: plColor }}>
                         {c.pl_usd != null ? `${plArrow} ${fmtLargeUsd(Math.abs(c.pl_usd))}` : "—"}
                     </div>
@@ -115,10 +123,16 @@ export default function CompanyCard({ c }: { c: DatCompany }) {
                 </div>
             </div>
 
-            {/* mNAV history (full width) */}
-            <div className="ch-dat-chart-row">
-                <div className="ch-card-title">mNAV History</div>
-                <MnavChart data={c.mnav_history} />
+            {/* Charts: Stock Price (6M) + mNAV History, side by side */}
+            <div className="ch-dat-charts">
+                <div className="ch-dat-chart-row">
+                    <div className="ch-card-title">{tr("stockChart", lang)}</div>
+                    <PriceChart data={c.price_history} lang={lang} />
+                </div>
+                <div className="ch-dat-chart-row">
+                    <div className="ch-card-title">{tr("mnavChart", lang)}</div>
+                    <MnavChart data={c.mnav_history} lang={lang} />
+                </div>
             </div>
         </div>
     );

@@ -6,37 +6,35 @@ import {
     Line,
     XAxis,
     YAxis,
-    ReferenceLine,
     Tooltip,
 } from "recharts";
+import type { DatPricePoint } from "@/lib/types";
 
-import type { DatMnavPoint } from "@/lib/types";
-
-const ACCRUING: Record<string, string> = {
-    ko: "데이터 축적 중",
-    en: "Accruing data…",
-    ja: "データ蓄積中",
-    zh: "数据累积中",
+const EMPTY: Record<string, string> = {
+    ko: "주가 데이터 없음",
+    en: "No price data",
+    ja: "株価データなし",
+    zh: "无股价数据",
 };
 
-export default function MnavChart({
+export default function PriceChart({
     data,
     lang = "en",
 }: {
-    data: DatMnavPoint[];
+    data: DatPricePoint[];
     lang?: string;
 }) {
     if (!data || data.length < 2) {
         return (
             <div className="ch-skel" style={{ height: 200 }}>
-                {ACCRUING[lang] ?? ACCRUING.en}
+                {EMPTY[lang] ?? EMPTY.en}
             </div>
         );
     }
-    const series = data.map((p) => ({
-        t: p.ts.slice(5, 10), // MM-DD
-        mnav: p.mnav,
-    }));
+    // 종가 등락 색: 마지막 ≥ 처음이면 up(초록), 아니면 down(빨강)
+    const up = data[data.length - 1].close >= data[0].close;
+    const stroke = up ? "var(--canton-up)" : "var(--canton-down)";
+    const series = data.map((p) => ({ t: p.ts.slice(5), close: p.close }));
     return (
         <div className="ch-chart" style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -46,6 +44,7 @@ export default function MnavChart({
                         tick={{ fontSize: 10, fill: "var(--zinc-500)" }}
                         tickLine={false}
                         axisLine={{ stroke: "var(--canton-border)" }}
+                        minTickGap={40}
                     />
                     <YAxis
                         tick={{ fontSize: 10, fill: "var(--zinc-500)" }}
@@ -53,12 +52,7 @@ export default function MnavChart({
                         axisLine={false}
                         width={40}
                         domain={["auto", "auto"]}
-                    />
-                    <ReferenceLine
-                        y={1.0}
-                        stroke="var(--canton-down)"
-                        strokeDasharray="4 4"
-                        label={{ value: "1.0x", fontSize: 10, fill: "var(--canton-down)", position: "right" }}
+                        tickFormatter={(v) => `$${Number(v).toFixed(1)}`}
                     />
                     <Tooltip
                         contentStyle={{
@@ -67,12 +61,12 @@ export default function MnavChart({
                             borderRadius: 6,
                             fontSize: 12,
                         }}
-                        formatter={(v) => [`${Number(v).toFixed(2)}x`, "mNAV"]}
+                        formatter={(v) => [`$${Number(v).toFixed(2)}`, "Close"]}
                     />
                     <Line
                         type="monotone"
-                        dataKey="mnav"
-                        stroke="var(--canton-lime)"
+                        dataKey="close"
+                        stroke={stroke}
                         strokeWidth={2}
                         dot={false}
                     />

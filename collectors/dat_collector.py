@@ -147,6 +147,33 @@ async def _fetch_stock(client: httpx.AsyncClient, ticker: str) -> tuple[Optional
     return price, None
 
 
+async def _fetch_price_history(client: httpx.AsyncClient, ticker: str) -> list[dict]:
+    """Yahoo Finance chart로 6개월 일봉 종가 히스토리 조회 (키 불필요).
+
+    반환: [{"ts": "YYYY-MM-DD", "close": float}, ...] (오름차순). 실패 시 [].
+    query2 호스트는 datacenter/가정용 IP 모두에서 query1보다 안정적이라 그대로 사용.
+    """
+    try:
+        url = f"{config.YAHOO_FINANCE_CHART_URL}/{ticker}"
+        r = await client.get(url, params={"interval": "1d", "range": "6mo"}, timeout=10)
+        if r.status_code != 200:
+            logger.warning(f"Yahoo history {ticker} status {r.status_code}")
+            return []
+        res = (r.json().get("chart", {}).get("result") or [{}])[0]
+        stamps = res.get("timestamp") or []
+        closes = (((res.get("indicators") or {}).get("quote") or [{}])[0]).get("close") or []
+        out: list[dict] = []
+        for ts, close in zip(stamps, closes):
+            if close is None:
+                continue
+            day = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+            out.append({"ts": day, "close": round(float(close), 4)})
+        return out
+    except Exception as e:
+        logger.warning(f"Yahoo history fetch failed for {ticker}: {e}")
+        return []
+
+
 async def _fetch_krw_rate(client: httpx.AsyncClient) -> Optional[float]:
     """USD/KRW 환율. 실패 시 None."""
     try:
@@ -172,6 +199,7 @@ async def collect_dat(cc_price: Optional[float]) -> dict:
         for co in companies:
             ticker = co.get("ticker", "")
             stock_price, market_cap = await _fetch_stock(client, ticker)
+            price_history = await _fetch_price_history(client, ticker)
 
             # 시총이 응답에 없으면 주가 × 발행주식수로 폴백
             shares = co.get("shares_outstanding") or 0
@@ -203,6 +231,7 @@ async def collect_dat(cc_price: Optional[float]) -> dict:
                 "value_krw": (value_usd * krw_rate) if (value_usd and krw_rate) else None,
                 "pl_krw": (pl_usd * krw_rate) if (pl_usd is not None and krw_rate) else None,
                 "risk": risk,
+                "price_history": price_history,
             })
 
     result = {
