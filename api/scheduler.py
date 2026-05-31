@@ -117,6 +117,46 @@ def _append_kpi_history(entry: dict) -> None:
     _KPI_HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False))
 
 
+# DAT mNAV history — one point per ticker per hour, 90-day ring buffer.
+# Mirrors _append_kpi_history but dedups by hour bucket (ts[:13]) instead of date.
+_DAT_HISTORY_FILE = Path(__file__).parent.parent / "data" / "dat_history.json"
+_DAT_HISTORY_MAX_PER_TICKER = 2160  # ~90 days hourly
+
+
+def _load_dat_history() -> list[dict]:
+    if not _DAT_HISTORY_FILE.exists():
+        return []
+    try:
+        data = json.loads(_DAT_HISTORY_FILE.read_text())
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.warning(f"DAT history read failed: {e}")
+        return []
+
+
+def _append_dat_history(ticker: str, ts: str, mnav) -> None:
+    """Append {ticker, ts, mnav}, dedup by (ticker, hour-bucket). Skips None mnav."""
+    if mnav is None:
+        return
+    history = _load_dat_history()
+    bucket = ts[:13]  # YYYY-MM-DDTHH
+    history = [
+        e for e in history
+        if not (e.get("ticker") == ticker and e.get("ts", "")[:13] == bucket)
+    ]
+    history.append({"ticker": ticker, "ts": ts, "mnav": round(float(mnav), 4)})
+    # Trim per-ticker to the ring-buffer cap (keep newest), preserve others.
+    by_ticker: dict[str, list[dict]] = {}
+    for e in history:
+        by_ticker.setdefault(e.get("ticker", ""), []).append(e)
+    trimmed: list[dict] = []
+    for items in by_ticker.values():
+        items.sort(key=lambda x: x.get("ts", ""))
+        trimmed.extend(items[-_DAT_HISTORY_MAX_PER_TICKER:])
+    _DAT_HISTORY_FILE.parent.mkdir(exist_ok=True)
+    _DAT_HISTORY_FILE.write_text(json.dumps(trimmed, ensure_ascii=False))
+
+
 # Tweet history — accumulates tweets across collection windows so the feed
 # can paginate past items. Ring buffer of last MEDIA-like cap; dedup by url.
 _TWEET_ITEMS_FILE = Path(__file__).parent.parent / "data" / "tweet_items.json"
@@ -835,6 +875,33 @@ async def collect_kr_companies(cache: TTLCache):
             logger.info("KR companies loaded from file cache")
 
 
+async def collect_dat(cache: TTLCache):
+    """DAT 트래커 — $CC 현재가를 cache에서 주입해 수집하고 mNAV 히스토리 누적."""
+    from collectors.dat_collector import collect_dat as _collect, load_cached_dat
+    try:
+        price = cache.get("price") or {}
+        cc_price = price.get("current_price_usd")
+        data = await _collect(cc_price)
+        if data and data.get("companies"):
+            # Append an mNAV history point per company, then attach history to payload.
+            for co in data["companies"]:
+                _append_dat_history(co.get("ticker", ""), data["fetched_at"], co.get("mnav"))
+            history = _load_dat_history()
+            for co in data["companies"]:
+                co["mnav_history"] = [
+                    {"ts": p["ts"], "mnav": p["mnav"]}
+                    for p in history if p.get("ticker") == co.get("ticker")
+                ]
+            cache.set("analytics:dat", data, ttl=600)
+            logger.info(f"DAT cached: {data['company_count']} companies")
+    except Exception as e:
+        logger.error(f"DAT collection failed: {e}")
+        cached = load_cached_dat()
+        if cached:
+            cache.set("analytics:dat", cached, ttl=600)
+            logger.info("DAT loaded from file cache")
+
+
 async def collect_holders(cache: TTLCache):
     """Major CC Holders 수집 — CantonScan API의 validator/SV/app party balance 병렬 조회."""
     from collectors.holders_collector import collect_major_holders, load_cached_holders
@@ -1002,6 +1069,8 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_funding_rates, cache, 60, "funding-rates"))  # 60초
     asyncio.create_task(_loop(collect_holders, cache, 3600, "holders"))  # 1시간
     asyncio.create_task(_loop(collect_kr_companies, cache, 1800, "kr-companies"))  # 30분
+    # DAT 트래커는 5분마다
+    asyncio.create_task(_loop(collect_dat, cache, 300, "dat"))
 
     # 즉시 1회 실행 — 첫 페이지 로드 시 빈 데이터 방지
     asyncio.create_task(collect_realtime_prices(cache))
