@@ -49,7 +49,7 @@ export default function DatPage() {
             <div className="label">합산 평가손익</div>
             <div className="value-row">
               <span className="value" style={{ color: totalPlPositive ? "var(--canton-up)" : "var(--canton-down)" }}>
-                {totalPlPositive ? "▲" : "▼"} {fmtLargeUsd(data?.total_pl_usd ?? 0)}
+                {totalPlPositive ? "▲" : "▼"} {fmtLargeUsd(Math.abs(data?.total_pl_usd ?? 0))}
               </span>
             </div>
           </div>
