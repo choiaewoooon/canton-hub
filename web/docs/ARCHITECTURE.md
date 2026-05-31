@@ -110,7 +110,7 @@ app/
 | Route | File | Hooks Used | Key Components |
 |-------|------|------------|----------------|
 | `/` | `app/page.tsx` | `usePrice`, `useNetwork`, `useNetworkStatus`, `useChart`, `useGovernance`, `useRealtimePrice` (SSE) | `hero/HeroPrice`, `kpi/KpiGrid`, `charts/ChartTabs`, `network/BurnMint`, `governance/HolderCard`, `governance/GovernanceCard` |
-| `/analytics` | `app/analytics/page.tsx` | `useRewardSplit`, `useCumulative`, `useAmuletPrice`, `useBurnBreakdown`, `useExchanges`, `useRealtimePrices`, `useHolders` | `analytics/RewardSplitChart`, `analytics/CumulativeSupply`, `analytics/AmuletPriceChart`, `analytics/ExchangeList`, `analytics/HoldersTable` |
+| `/analytics` | `app/analytics/page.tsx` | `useRewardSplit`, `useCumulative`, `useAmuletPrice`, `useBurnBreakdown`, `useExchanges`, `useRealtimePrices`, `useHolders`, `useFundingRates` | `analytics/RewardSplitChart`, `analytics/CumulativeSupply`, `analytics/AmuletPriceChart`, `analytics/ExchangeList`, `analytics/HoldersTable`, `analytics/FundingRateMatrix` (ArbitrageTracker 하위) |
 | `/feed` | `app/feed/page.tsx` | `useFeed(lang, page)`, `useGovernance`, `useKrCompanies` | `feed-page/TwitterArchive`, `feed-page/GovernanceCalendar`, `feed-page/EcosystemGuide`, `feed-page/ParticipationGuide`, `feed-page/KoreanCompanies` — 통합 타임라인(타입 아이콘: 트윗/뉴스 구분), 카테고리 배지, prev/next 페이지네이션 |
 
 **Shared (all routes)**: `nav/TopNav`, `footer`, theme toggle, language switch.
@@ -137,6 +137,7 @@ Source: `lib/api.ts` (REST) + `lib/sse.ts` (streaming).
 | `useRealtimePrices()` | `/api/analytics/realtime-prices` | 5s | `RealtimePrices` |
 | `useHolders()` | `/api/analytics/holders` | 3600s | `HoldersData` |
 | `useKrCompanies()` | `/api/analytics/kr-companies` | 1800s | `KrCompaniesData` |
+| `useFundingRates()` | `/api/analytics/funding-rates` | 30s | `FundingRates` — `{rates: FundingRate[], updated_at}`. 캐시 미스 시 `{rates: [], updated_at: null}`. |
 | `useRealtimePrice()` (SSE) | `/api/sse/price` | stream | `PriceData` events |
 
 **Base URL**: `process.env.NEXT_PUBLIC_API_URL` (dev `http://localhost:8000`, prod `https://<random>.trycloudflare.com` — Cloudflare Quick Tunnel이 Mac localhost:8000으로 전달. 터널 URL 변경 시 `scripts/update-vercel-env.sh`가 자동 갱신).
@@ -164,6 +165,7 @@ Exported from `lib/types.ts`:
 | `RealtimePrices` | `useRealtimePrices`, `analytics/*` |
 | `HoldersData` | `useHolders`, `analytics/HoldersTable` |
 | `KrCompaniesData`, `KrCompany`, `KrWallet` | `useKrCompanies`, `feed-page/KoreanCompanies` |
+| `FundingRate`, `FundingRates` | `useFundingRates`, `analytics/FundingRateMatrix` |
 
 **Rule**: 모든 API 응답은 반드시 `lib/types.ts` 에서 선언 → `lib/api.ts` 훅 반환 타입에 명시.
 
@@ -288,3 +290,4 @@ git push → Vercel webhook → install → next build (Turbopack)
 |------|------|------|
 | 2026-04-14 | 초기 생성 | docs-init으로 자동 생성 |
 | 2026-05-30 | 피드 v2 반영: `useFeed(lang, page)` 페이지네이션, FeedData 응답 shape 업데이트, /feed 타입 아이콘·카테고리 배지·페이지네이션 UI 기록 | feat/feed-v2-categorize-paginate |
+| 2026-05-31 | 펀딩비 매트릭스 반영: `useFundingRates` 훅, `FundingRate`/`FundingRates` 타입, `analytics/FundingRateMatrix` + `.i18n.ts` 컴포넌트, `/analytics` 라우트 업데이트 | feat/funding-rates |

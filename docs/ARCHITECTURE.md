@@ -94,7 +94,8 @@ api/main.py
         ├── collectors/kr_companies_collector.py ─▶ CantonScan party API
         ├── collectors/dex_oi_collector.py       ─▶ DEX REST
         ├── collectors/realtime_prices.py        ─▶ 10 exchange REST
-        └── collectors/coingecko_scraper.py      ─▶ CoinGecko (Playwright)
+        ├── collectors/coingecko_scraper.py      ─▶ CoinGecko (Playwright)
+        └── collectors/funding_rates.py          ─▶ 7 perp 거래소 펀딩비 (DEX: Hyperliquid/Lighter/Extended/Aster, CEX: Binance/Bybit/OKX)
 ```
 
 | Rule | Enforcement |
@@ -129,6 +130,7 @@ api/main.py
 | GET | `/api/analytics/burn-breakdown` | — | `burn_breakdown` | `{categories: [{name, amount, pct}, ...]}` |
 | GET | `/api/analytics/holders` | — | `holders` | `{total, top: [{address, balance, pct}, ...]}` |
 | GET | `/api/analytics/kr-companies` | — | `kr_companies` | `{companies: [{name, holdings, source}, ...]}` |
+| GET | `/api/analytics/funding-rates` | — | `analytics:funding-rates` | `{rates: [{exchange, symbol, funding_rate, apr, settlement_interval_h, exchange_type, updated_at}, ...], updated_at}` — 캐시 미스 시 `{rates: [], updated_at: null}` |
 | GET | `/api/health` | — | — | `{status: "ok"}` (Cloudflare Tunnel 헬스체크) |
 
 **WHEN** a route's cache key is missing/expired → return HTTP 503 with `{error: "cache_miss", key: "<key>"}`. Routes do **not** trigger on-demand collection.
@@ -224,6 +226,7 @@ api/main.py
 | `homepage` | 86400s | `collect_homepage` | 86400s | (internal / pre-render) |
 | `kr_companies` | 1800s | `collect_kr_companies` | 1800s | `/api/analytics/kr-companies` |
 | `media:items` | 7200s | `collect_media` | 3600s | `/api/feed` |
+| `analytics:funding-rates` | 90s | `collect_funding_rates` | 60s | `/api/analytics/funding-rates` |
 
 **Rule**: Producer interval MUST be ≤ TTL/2 to ensure no serving stale-miss gaps.
 
@@ -235,3 +238,4 @@ api/main.py
 |------|--------|--------|
 | 2026-04-15 | Initial creation | Generated via `docs-init` skill |
 | 2026-05-30 | 피드 v2 반영: `tweet:items` 캐시 키 추가, `feed:{lang}` ai_summary 전용으로 변경, `/api/feed` 페이지네이션·트윗분류 문서화, `data/tweet_items.json` 링버퍼 기록 | feat/feed-v2-categorize-paginate |
+| 2026-05-31 | 펀딩비 매트릭스 반영: `analytics:funding-rates` 캐시 키, `GET /api/analytics/funding-rates`, `collectors/funding_rates.py` 모듈 추가 | feat/funding-rates |

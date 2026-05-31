@@ -58,6 +58,13 @@ return _EMPTY_* skeleton (HTTP 200, empty payload)
 | 17 | Google News RSS (`"Canton Network"` 정확구문) | RSS | 1h | `media_collector.py` | `/api/feed` |
 | 18 | Canton 공식 블로그 (`canton.network/blog/rss.xml`) | RSS | 1h | `media_collector.py` | `/api/feed` |
 | 19 | Digital Asset 블로그 (`blog.digitalasset.com/blog/rss.xml`) | RSS | 1h | `media_collector.py` | `/api/feed` |
+| 20 | Hyperliquid `info` POST API (펀딩비) | REST | 60s | `funding_rates.py` | `/api/analytics/funding-rates` |
+| 21 | Lighter REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
+| 22 | Aster REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
+| 23 | Extended DEX REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
+| 24 | Binance Futures REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
+| 25 | Bybit REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
+| 26 | OKX REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
 
 **Fallback chains** (ordered):
 - **Network stats**: CantonScan REST `/stats` → CantonScan HTML scrape → Playwright render → file cache → `_EMPTY_NETWORK`
@@ -95,6 +102,38 @@ GET /api/feed — tweet:items + media:items 머지 → ts 내림차순 페이지
 ```
 
 **비용 게이팅**: 이미 처리된 guid는 재처리하지 않음. 1회 실행당 최대 12건(`config.MEDIA_MAX_NEW_PER_RUN`)만 LLM/번역 호출.
+
+---
+
+### 2.3 펀딩비 수집 흐름 (funding-rates)
+
+```
+60초 폴링 (collect_funding_rates, scheduler.py)
+    │
+    ▼
+funding_rates.py — 7개 거래소 병렬 fan-out
+    │  DEX: Hyperliquid (1h 정산), Lighter (1h), Extended (1h), Aster (8h)
+    │  CEX: Binance (8h), Bybit (8h), OKX (8h)
+    │
+    ├── 각 fetcher: 거래소별 REST 호출 → FundingRate dataclass
+    │       FundingRate.to_apr() — settlement_interval_h 기반 APR 정규화
+    │           1h 정산:  rate × 8760
+    │           8h 정산:  rate × 1095
+    │
+    ▼
+collect_all_funding_rates() — asyncio.gather (graceful partial)
+    │  ≥1개 거래소 응답 시만 캐시 갱신 (이전 값 보존 로직)
+    │
+    ▼
+cache.set("analytics:funding-rates", {...}, ttl=90)
+    │
+    ▼
+GET /api/analytics/funding-rates
+    │  캐시 히트: {rates: FundingRate[], updated_at}
+    └─ 캐시 미스: {rates: [], updated_at: null}
+```
+
+**Graceful partial**: 일부 거래소 fetcher가 실패해도 성공한 거래소의 데이터만 반환. 모든 거래소가 실패하면 캐시를 덮어쓰지 않고 이전 값을 유지.
 
 ---
 
@@ -345,5 +384,6 @@ python -c "from canton_hub.config import validate_env; validate_env()"
 |---|---|---|
 | 2026-04-14 | Initial generation | docs-init auto-generation |
 | 2026-05-30 | 피드 v2 반영: 트윗 누적 링버퍼(data/tweet_items.json), Haiku 카테고리 분류, ai_summary에 뉴스 헤드라인 포함, 2.2 트윗 수집 흐름 섹션 추가 | feat/feed-v2-categorize-paginate |
+| 2026-05-31 | 펀딩비 데이터 소스 추가: 7개 거래소(#20–26), 2.3 펀딩비 수집 흐름 섹션 추가 | feat/funding-rates |
 
 <!-- TODO: add entries on every collector change, TTL adjustment, or new data source -->
