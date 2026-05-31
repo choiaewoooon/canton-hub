@@ -2,7 +2,7 @@
 거래소별 펀딩비(Funding Rate) 수집기 — 7개 Perp 거래소
 
 60초 간격으로 fetch. 양빵(델타뉴트럴) 페어 추천용 raw 데이터 제공.
-1h 정산(HL/Extended/Lighter) ↔ 8h 정산(Aster/Binance/Bybit/OKX) 혼재 →
+1h 정산(HL/Extended) ↔ 8h 정산(Lighter/Aster/Binance/Bybit/OKX) 혼재 →
 to_apr()로 연환산 정규화.
 
 수집기 규약(../CLAUDE.md §0): 예외는 내부에서 삼키고 None 반환. 절대 raise 금지.
@@ -41,6 +41,12 @@ def _next_hourly_ts() -> int:
     return now - (now % 3600) + 3600
 
 
+def _next_8h_ts() -> int:
+    """8h 정산인데 nextFundingTime 미제공(Lighter)용 근사: 다음 00/08/16 UTC 경계."""
+    now = int(time.time())
+    return now - (now % 28800) + 28800
+
+
 async def fetch_hyperliquid_funding(client: httpx.AsyncClient) -> FundingRate | None:
     try:
         resp = await client.post(
@@ -73,9 +79,10 @@ async def fetch_lighter_funding(client: httpx.AsyncClient) -> FundingRate | None
         for r in resp.json().get("funding_rates", []):
             if r.get("exchange") == "lighter" and r.get("symbol") == "CC":
                 fr_raw = float(r.get("rate", 0))
+                # Lighter는 8h 정산 — 엔드포인트 rate가 8h 기준이라 1h로 보면 APR 8배 과대.
                 return FundingRate(
                     "Lighter", "DEX", "perpetual", "CC/USDC",
-                    fr_raw, 1, to_apr(fr_raw, 1), _next_hourly_ts(),
+                    fr_raw, 8, to_apr(fr_raw, 8), _next_8h_ts(),
                     "zklighter.elliot.ai",
                 )
     except Exception as e:

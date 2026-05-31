@@ -76,7 +76,8 @@ async def test_fetch_lighter_funding_parses():
     fr = await fetch_lighter_funding(_FakeClient(payload))
     assert fr.source == "Lighter"
     assert fr.fr_raw == pytest.approx(0.00032)
-    assert fr.period_hours == 1
+    assert fr.period_hours == 8  # Lighter는 8h 정산 (엔드포인트 rate가 8h 기준)
+    assert fr.fr_apr == pytest.approx(to_apr(0.00032, 8), abs=0.01)
 
 
 @pytest.mark.asyncio
