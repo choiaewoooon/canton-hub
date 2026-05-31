@@ -65,11 +65,17 @@ return _EMPTY_* skeleton (HTTP 200, empty payload)
 | 24 | Binance Futures REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
 | 25 | Bybit REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
 | 26 | OKX REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
+| 27 | Yahoo Finance chart endpoint (CNTN 주가/시총, 키 불필요) | REST | ~5min | `dat_collector.py` | `/api/analytics/dat` |
+| 28 | open.er-api.com (USD/KRW 환율, 키 불필요) | REST | ~5min | `dat_collector.py` | `/api/analytics/dat` |
 
 **Fallback chains** (ordered):
 - **Network stats**: CantonScan REST `/stats` → CantonScan HTML scrape → Playwright render → file cache → `_EMPTY_NETWORK`
 - **Holders**: CantonScan REST → ccview.io Playwright → file cache → `_EMPTY_HOLDERS`
 - **Realtime prices**: parallel fan-out across CEX/DEX; each source independently degrades
+
+**DAT 트래커 데이터 파일** (`dat_collector.py`):
+- `data/dat_companies.json` — 공식 공시(8-K 등) 기반으로 **수기 관리**되는 마스터 데이터 (티커, 회사명, $CC 보유량). 외부 수집 대상이 아니며 운영자가 직접 갱신한다.
+- `data/dat_history.json` — 런타임 생성 mNAV 시계열 **링버퍼** (시간당 1포인트, 최대 ~90일 = 2160 포인트). 수집 루프가 매 실행마다 append하고 초과분을 오래된 순으로 삭제.
 
 ---
 
