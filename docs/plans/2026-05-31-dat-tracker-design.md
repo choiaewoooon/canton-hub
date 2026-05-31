@@ -24,9 +24,10 @@
 ```
 data/dat_companies.json  (수동 갱신: 공식발표 기반 보유량·평단·부채·현금·발행주식·SV·근거)
         │
-api/scheduler.py  collect_dat loop (간격 5분)
-   ├─ cache.get("price")로 기존 $CC 현재가를 읽어 cc_price 인자로 주입  (★ 별도 CoinGecko 호출 금지)
-   └─ collectors/dat_collector.py(cc_price=...) 호출
+api/scheduler.py  async def collect_dat(cache) loop (간격 5분)   ← collect_network와 동일 패턴
+   ├─ cache.get("price")["current_price_usd"]로 기존 $CC 현재가를 읽어 cc_price로 사용  (★ 별도 CoinGecko 호출 금지)
+   ├─ collectors/dat_collector.py(cc_price=...) 순수 함수 호출
+   └─ _append_dat_history(...)로 mNAV 점 누적 후 cache.set("dat", ...)
         │
 collectors/dat_collector.py   ← kr_companies_collector 패턴 (JSON 로드 + 검증, 예외 내부 처리, 빈 데이터 폴백)
    ├─ dat_companies.json 로드 (보유량·평단·부채·현금·발행주식·SV·근거)
@@ -82,7 +83,7 @@ web/components/ch/navbar.tsx 에 "DAT" 탭 추가  (★ 실제 렌더되는 navb
 | 필드 | 계산식 / 소스 |
 |---|---|
 | `stock_price`, `market_cap` | 라이브 (Yahoo Finance). 시총 없으면 `stock_price × shares_outstanding` |
-| `cc_price` | 라이브 ($CC 현재가, scheduler가 `cache.get("price")`로 주입) |
+| `cc_price` | 라이브 ($CC 현재가, scheduler가 `cache.get("price")["current_price_usd"]`로 주입 — 실제 필드명 확인됨) |
 | `nav` | `cc_holdings × cc_price` ($CC NAV) |
 | `mnav` | **EV식으로 고정: `(market_cap + debt − cash) / nav`**, 라벨 "mNAV (EV / $CC Reserve)". `debt`/`cash`가 둘 다 미상(0/누락)이면 `market_cap / nav`로 폴백하고 라벨을 "mNAV (Market Cap / $CC NAV)"로 표기 |
 | `mnav_label` | 위에서 실제 사용한 공식 라벨 문자열 (프론트 표시용) |
@@ -97,7 +98,7 @@ web/components/ch/navbar.tsx 에 "DAT" 탭 추가  (★ 실제 렌더되는 navb
 
 ### 3.3 mNAV 시계열 누적 (`data/dat_history.json`)
 
-`data/kpi_history.json`와 동일한 "파일에 누적 append" 패턴을 따른다.
+기존 `data/kpi_history.json` + `api/scheduler.py:105`의 `_append_kpi_history`(ISO 날짜로 dedup) 패턴을 본떠 **`_append_dat_history`** 헬퍼를 추가한다(dedup 단위만 hour로 변경).
 
 - **누가/언제 append:** `collect_dat` 스케줄러 루프가 **티커별로 점 1개**를 추가한다. 단, 노이즈 방지를 위해 **마지막 점과 같은 시(hour) 버킷이면 덮어쓰고, 새 시 버킷이면 append**(시간당 1점).
 - **보존 윈도우:** 티커별 **최근 90일(약 2160점)**만 유지하고 초과분은 앞에서 잘라낸다(무한 증가 방지).
@@ -128,8 +129,7 @@ web/components/ch/navbar.tsx 에 "DAT" 탭 추가  (★ 실제 렌더되는 navb
 - 모든 색/숫자는 `var(--canton-*)` + `tabular-nums`. 하드코딩 색상 금지.
 - 반응형: 기존 `@media (max-width: 860px)` 규칙 따라 1열로.
 - *`.ch-bm-dial`은 down→up 그라데이션 트랙 + 포인터가 하드코딩돼 있어, mNAV 게이지(1.0x 기준선)로 재사용하려면 **포인터 위치 계산만 살짝 수정**(1.0x를 트랙상 한 지점에 매핑). 비용 작음. 부담되면 단순 숫자+칩으로 대체 가능.
-- navbar: `web/components/ch/navbar.tsx`의 `LINKS` 배열(현재 `/`, `/analytics`, `/feed` 3개)에 `/dat`를 **동급 최상위 탭**으로 추가. (`components/nav/navbar.tsx`는 구버전·미사용.)
-- *`.ch-bm-dial`은 down→up 그라데이션 트랙 + 중앙 포인터가 하드코딩돼 있어, mNAV 게이지(1.0x 기준선)로 재사용하려면 **포인터 위치 계산 로직만 살짝 수정**해야 한다(기준선=1.0x를 트랙상 특정 지점에 매핑). 비용 작음. 부담되면 단순 숫자+칩 표기로 대체 가능.
+- navbar: `web/components/ch/navbar.tsx`의 `LINKS` 배열(현재 `/`=대시보드, `/analytics`=분석, `/feed`=피드 3개)에 `{ href: "/dat", label: "DAT" }`를 **동급 최상위 탭**으로 추가. (`components/nav/navbar.tsx`는 구버전·미사용.)
 
 ## 5. death-spiral 리스크 신호 (절제된 버전)
 
