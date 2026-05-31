@@ -80,7 +80,7 @@ export default function CompanyCard({ c }: { c: DatCompany }) {
             <div style={{ margin: "14px 0", paddingTop: 12, borderTop: "1px solid var(--canton-border)" }}>
                 <div className="ch-eyebrow">Real-time P/L</div>
                 <div style={{ fontSize: 20, fontWeight: 600, color: plColor, fontVariantNumeric: "tabular-nums" }}>
-                    {c.pl_usd != null ? `${plArrow} ${fmtLargeUsd(c.pl_usd)}` : "—"}
+                    {c.pl_usd != null ? `${plArrow} ${fmtLargeUsd(Math.abs(c.pl_usd))}` : "—"}
                     {c.pl_pct != null && (
                         <span style={{ fontSize: 13, marginLeft: 8 }}>{fmtPct(c.pl_pct)}</span>
                     )}

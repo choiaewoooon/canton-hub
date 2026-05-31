@@ -1075,3 +1075,4 @@ async def start_scheduler(cache: TTLCache):
     # 즉시 1회 실행 — 첫 페이지 로드 시 빈 데이터 방지
     asyncio.create_task(collect_realtime_prices(cache))
     asyncio.create_task(collect_funding_rates(cache))
+    asyncio.create_task(collect_dat(cache))
