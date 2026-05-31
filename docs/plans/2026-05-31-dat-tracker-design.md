@@ -127,6 +127,8 @@ web/components/ch/navbar.tsx 에 "DAT" 탭 추가  (★ 실제 렌더되는 navb
 
 - 모든 색/숫자는 `var(--canton-*)` + `tabular-nums`. 하드코딩 색상 금지.
 - 반응형: 기존 `@media (max-width: 860px)` 규칙 따라 1열로.
+- *`.ch-bm-dial`은 down→up 그라데이션 트랙 + 포인터가 하드코딩돼 있어, mNAV 게이지(1.0x 기준선)로 재사용하려면 **포인터 위치 계산만 살짝 수정**(1.0x를 트랙상 한 지점에 매핑). 비용 작음. 부담되면 단순 숫자+칩으로 대체 가능.
+- navbar: `web/components/ch/navbar.tsx`의 `LINKS` 배열(현재 `/`, `/analytics`, `/feed` 3개)에 `/dat`를 **동급 최상위 탭**으로 추가. (`components/nav/navbar.tsx`는 구버전·미사용.)
 - *`.ch-bm-dial`은 down→up 그라데이션 트랙 + 중앙 포인터가 하드코딩돼 있어, mNAV 게이지(1.0x 기준선)로 재사용하려면 **포인터 위치 계산 로직만 살짝 수정**해야 한다(기준선=1.0x를 트랙상 특정 지점에 매핑). 비용 작음. 부담되면 단순 숫자+칩 표기로 대체 가능.
 
 ## 5. death-spiral 리스크 신호 (절제된 버전)
@@ -150,7 +152,8 @@ mNAV 기준 3단계 배지. **공포 조장·게임화 없이 사실만** 표기
 
 ## 7. 에러 처리 & 엣지 케이스
 
-- 라이브 가격 실패 → 마지막 캐시값 + "official announcement data" 표기(deathspiral 폴백 철학과 동일). route는 500 금지, 빈 폴백 반환.
+- 라이브 가격(주가/$CC/환율) 실패 → 마지막 캐시값 + "official announcement data" 표기(deathspiral 폴백 철학과 동일). collector는 예외 삼키고 빈/부분 데이터 반환, route는 500 금지.
+- Yahoo Finance 호출 실패 → 해당 티커 주가/시총 필드만 `null`로 두고 나머지(보유량·평단 등 정적값)는 그대로 표시.
 - 보유량 미발표/0 → mNAV·P/L "—" 표기, 리스크 배지 숨김.
 - `mnav_history` 데이터가 짧으면 차트 대신 "데이터 축적 중" 스켈레톤(`.ch-skel`).
 
