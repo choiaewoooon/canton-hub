@@ -92,20 +92,59 @@ def _load_companies() -> list[dict]:
         return []
 
 
-async def _fetch_stock(client: httpx.AsyncClient, ticker: str) -> tuple[Optional[float], Optional[float]]:
-    """Yahoo Finance chart 엔드포인트로 (현재가, 시총) 조회. 시총은 응답에 없으면 None."""
+async def _fetch_stooq(client: httpx.AsyncClient, ticker: str) -> Optional[float]:
+    """stooq CSV로 종가 조회 (1순위, 키 불필요). 실패/없음 시 None.
+
+    응답 예: 'Symbol,Date,Time,Open,High,Low,Close,Volume\\nCNTN.US,2026-05-29,...,3.1,...'
+    값이 없으면 필드가 'N/D'로 옴.
+    """
+    try:
+        r = await client.get(
+            config.STOOQ_QUOTE_URL,
+            params={"s": f"{ticker.lower()}.us", "f": "sd2t2ohlcv", "h": "", "e": "csv"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return None
+        lines = r.text.strip().splitlines()
+        if len(lines) < 2:
+            return None
+        cols = lines[1].split(",")
+        close = cols[6] if len(cols) > 6 else "N/D"
+        if close in ("", "N/D"):
+            return None
+        return float(close)
+    except Exception as e:
+        logger.warning(f"stooq fetch failed for {ticker}: {e}")
+        return None
+
+
+async def _fetch_yahoo(client: httpx.AsyncClient, ticker: str) -> Optional[float]:
+    """Yahoo Finance chart로 현재가 조회 (2순위 폴백). 실패 시 None."""
     try:
         url = f"{config.YAHOO_FINANCE_CHART_URL}/{ticker}"
         r = await client.get(url, params={"interval": "1d", "range": "1d"}, timeout=10)
         if r.status_code != 200:
             logger.warning(f"Yahoo {ticker} status {r.status_code}")
-            return None, None
+            return None
         meta = (r.json().get("chart", {}).get("result") or [{}])[0].get("meta", {})
         price = meta.get("regularMarketPrice")
-        return (float(price) if price is not None else None), None
+        return float(price) if price is not None else None
     except Exception as e:
         logger.warning(f"Yahoo fetch failed for {ticker}: {e}")
-        return None, None
+        return None
+
+
+async def _fetch_stock(client: httpx.AsyncClient, ticker: str) -> tuple[Optional[float], Optional[float]]:
+    """주가 (현재가, 시총) 조회. stooq 1순위 → Yahoo 2순위 폴백.
+
+    시총은 어느 소스에도 안정적으로 없어 항상 None을 반환하고,
+    호출부에서 `현재가 × shares_outstanding`로 산출한다.
+    """
+    price = await _fetch_stooq(client, ticker)
+    if price is None:
+        price = await _fetch_yahoo(client, ticker)
+    return price, None
 
 
 async def _fetch_krw_rate(client: httpx.AsyncClient) -> Optional[float]:
