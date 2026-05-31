@@ -24,6 +24,12 @@ COINGECKO_API_URL = "https://api.coingecko.com/api/v3"
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY", "")
 
 # ============================================================
+# DAT Tracker — stock price + FX (no API key required)
+# ============================================================
+YAHOO_FINANCE_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
+EXCHANGERATE_API_URL = "https://open.er-api.com/v6/latest/USD"
+
+# ============================================================
 # CantonScan — used by cantonscan_collector
 # ============================================================
 CANTONSCAN_STATS_URL = "https://www.cantonscan.com/stats"
