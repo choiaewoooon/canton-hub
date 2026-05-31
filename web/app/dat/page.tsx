@@ -63,7 +63,7 @@ export default function DatPage() {
         {isLoading && companies.length === 0 ? (
           <div className="ch-skel" style={{ height: 320 }}>로딩 중</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 16 }}>
+          <div className="ch-dat-list">
             {companies.map((c) => (
               <CompanyCard key={c.ticker} c={c} />
             ))}
@@ -79,7 +79,7 @@ export default function DatPage() {
                 <tr><th>Data</th><th>Source</th><th>Update</th></tr>
               </thead>
               <tbody>
-                <tr><td>Stock Price / Market Cap</td><td>Yahoo Finance</td><td>5 min</td></tr>
+                <tr><td>Stock Price / Market Cap</td><td>stooq.com → Yahoo Finance</td><td>5 min</td></tr>
                 <tr><td>$CC Price</td><td>CoinGecko (Canton Hub)</td><td>30 sec</td></tr>
                 <tr><td>CC Holdings / Avg Buy</td><td>Official filings (manual)</td><td>On announcement</td></tr>
                 <tr><td>USD/KRW</td><td>open.er-api.com</td><td>5 min</td></tr>

@@ -6,11 +6,11 @@ import MnavChart from "./mnav-chart";
 
 const RISK_META: Record<
     string,
-    { label: string; cls: string; mark: string }
+    { label: string; cls: string; mark: string; color: string }
 > = {
-    healthy: { label: "Healthy", cls: "up", mark: "●" },
-    watch: { label: "Watch", cls: "burn", mark: "◐" },
-    below_nav: { label: "Below NAV", cls: "down", mark: "▼" },
+    healthy: { label: "Healthy", cls: "up", mark: "●", color: "var(--canton-up)" },
+    watch: { label: "Watch", cls: "burn", mark: "◐", color: "var(--canton-burn)" },
+    below_nav: { label: "Below NAV", cls: "down", mark: "▼", color: "var(--canton-down)" },
 };
 
 function fmtKrwEok(n: number | null): string {
@@ -19,23 +19,38 @@ function fmtKrwEok(n: number | null): string {
     return `₩${(Math.abs(n) / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}억`;
 }
 
+/** mNAV 게이지 — 0..2x 트랙, 1.0x 기준선, 리스크 색 포인터. */
+function MnavGauge({ mnav, color }: { mnav: number | null; color: string }) {
+    if (mnav == null) return null;
+    const pos = Math.max(0, Math.min(2, mnav)) / 2 * 100; // 1.0x → 50%
+    return (
+        <div className="ch-mnav-gauge" aria-hidden>
+            <div className="track" />
+            <div className="ref" />
+            <div className="ref-label">1.0x</div>
+            <div className="pointer" style={{ left: `${pos}%`, background: color }} />
+            <div className="axis"><span>0x</span><span>2x+</span></div>
+        </div>
+    );
+}
+
 export default function CompanyCard({ c }: { c: DatCompany }) {
     const plPositive = (c.pl_usd ?? 0) >= 0;
     const plColor = plPositive ? "var(--canton-up)" : "var(--canton-down)";
     const plArrow = plPositive ? "▲" : "▼";
     const risk = c.risk ? RISK_META[c.risk] : null;
+    const invested =
+        c.avg_buy_price && c.cc_holdings ? c.avg_buy_price * c.cc_holdings : null;
 
     return (
-        <div className="ch-card">
-            <div className="ch-card-head">
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: "var(--zinc-50)" }}>
-                        {c.ticker}
-                    </span>
+        <div className="ch-card ch-dat-hero">
+            {/* Header */}
+            <div className="ch-dat-hero-head">
+                <div className="ch-dat-hero-id">
+                    <span className="tkr">{c.ticker}</span>
+                    <span className="nm">{c.name}</span>
                     <span className="ch-chip muted ch-chip-xs">{c.exchange}</span>
-                    {c.super_validator && (
-                        <span className="ch-chip lime ch-chip-xs">SV</span>
-                    )}
+                    {c.super_validator && <span className="ch-chip lime ch-chip-xs">SV</span>}
                 </div>
                 {risk && (
                     <span className={`ch-chip ${risk.cls}`}>
@@ -44,56 +59,67 @@ export default function CompanyCard({ c }: { c: DatCompany }) {
                 )}
             </div>
 
-            {/* Holdings */}
-            <div style={{ marginBottom: 12 }}>
-                <div className="ch-eyebrow">Holdings</div>
-                <div style={{ fontSize: 22, fontWeight: 600, color: "var(--zinc-50)", fontVariantNumeric: "tabular-nums" }}>
-                    {c.cc_holdings ? fmtCc(c.cc_holdings) : "—"}
-                </div>
-            </div>
-
-            {/* Stat grid */}
-            <div className="ch-bm-stats">
-                <div className="ch-bm-stat">
-                    <div className="k">Avg Buy</div>
-                    <div className="v">{c.avg_buy_price ? fmtUsd(c.avg_buy_price) : "—"}</div>
-                </div>
-                <div className="ch-bm-stat">
-                    <div className="k">CC Price</div>
-                    <div className="v">{fmtUsd(c.cc_price)}</div>
-                </div>
-                <div className="ch-bm-stat">
-                    <div className="k">Value</div>
-                    <div className="v">{fmtLargeUsd(c.nav)}</div>
-                </div>
-            </div>
-
-            {/* mNAV */}
-            <div style={{ margin: "14px 0" }}>
-                <div className="ch-eyebrow">{c.mnav_label ?? "mNAV"}</div>
-                <div style={{ fontSize: 24, fontWeight: 600, color: "var(--canton-private)", fontVariantNumeric: "tabular-nums" }}>
-                    {c.mnav != null ? `${c.mnav.toFixed(2)}x` : "—"}
-                </div>
-            </div>
-
-            {/* P/L */}
-            <div style={{ margin: "14px 0", paddingTop: 12, borderTop: "1px solid var(--canton-border)" }}>
-                <div className="ch-eyebrow">Real-time P/L</div>
-                <div style={{ fontSize: 20, fontWeight: 600, color: plColor, fontVariantNumeric: "tabular-nums" }}>
-                    {c.pl_usd != null ? `${plArrow} ${fmtLargeUsd(Math.abs(c.pl_usd))}` : "—"}
-                    {c.pl_pct != null && (
-                        <span style={{ fontSize: 13, marginLeft: 8 }}>{fmtPct(c.pl_pct)}</span>
-                    )}
-                </div>
-                {c.pl_krw != null && (
-                    <div style={{ fontSize: 12, color: "var(--zinc-500)", marginTop: 2 }}>
-                        ≈ {plArrow} {fmtKrwEok(c.pl_krw)}
+            {/* 3-up: Holdings | mNAV | P/L */}
+            <div className="ch-dat-grid">
+                {/* Treasury */}
+                <div className="ch-dat-cell">
+                    <div className="ch-eyebrow">$CC Holdings</div>
+                    <div className="big">{c.cc_holdings ? fmtCc(c.cc_holdings) : "—"}</div>
+                    <div className="row-stats">
+                        <div className="stat">
+                            <span className="k">Avg Buy</span>
+                            <span className="v">{c.avg_buy_price ? fmtUsd(c.avg_buy_price) : "—"}</span>
+                        </div>
+                        <div className="stat">
+                            <span className="k">CC Price</span>
+                            <span className="v">{fmtUsd(c.cc_price)}</span>
+                        </div>
+                        <div className="stat">
+                            <span className="k">CC NAV</span>
+                            <span className="v">{fmtLargeUsd(c.nav)}</span>
+                        </div>
                     </div>
-                )}
+                </div>
+
+                {/* mNAV + gauge */}
+                <div className="ch-dat-cell">
+                    <div className="ch-eyebrow">{c.mnav_label ?? "mNAV"}</div>
+                    <div className="big private">{c.mnav != null ? `${c.mnav.toFixed(2)}x` : "—"}</div>
+                    <MnavGauge mnav={c.mnav} color={risk?.color ?? "var(--canton-private)"} />
+                </div>
+
+                {/* P/L */}
+                <div className="ch-dat-cell">
+                    <div className="ch-eyebrow">Real-time P/L</div>
+                    <div className="big" style={{ color: plColor }}>
+                        {c.pl_usd != null ? `${plArrow} ${fmtLargeUsd(Math.abs(c.pl_usd))}` : "—"}
+                    </div>
+                    <div className="sub" style={{ fontSize: 12, color: "var(--zinc-500)" }}>
+                        {c.pl_pct != null && <span style={{ color: plColor }}>{fmtPct(c.pl_pct)}</span>}
+                        {c.pl_krw != null && <span> · ≈ {plArrow} {fmtKrwEok(c.pl_krw)}</span>}
+                    </div>
+                    <div className="row-stats">
+                        <div className="stat">
+                            <span className="k">Stock</span>
+                            <span className="v">{fmtUsd(c.stock_price)}</span>
+                        </div>
+                        <div className="stat">
+                            <span className="k">Market Cap</span>
+                            <span className="v">{fmtLargeUsd(c.market_cap)}</span>
+                        </div>
+                        <div className="stat">
+                            <span className="k">Invested</span>
+                            <span className="v">{fmtLargeUsd(invested)}</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            {/* mNAV history */}
-            <MnavChart data={c.mnav_history} />
+            {/* mNAV history (full width) */}
+            <div className="ch-dat-chart-row">
+                <div className="ch-card-title">mNAV History</div>
+                <MnavChart data={c.mnav_history} />
+            </div>
         </div>
     );
 }
