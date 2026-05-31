@@ -8,7 +8,10 @@
 
 **Tech Stack:** Python 3.12 / FastAPI / httpx / APScheduler-style asyncio loops / pytest (backend); Next.js 16 / React 19 / TypeScript / Tailwind v4 / Recharts / SWR (frontend).
 
-**Design source of truth:** [docs/plans/2026-05-31-dat-tracker-design.md](./2026-05-31-dat-tracker-design.md). This plan supersedes that spec's §9 file list in two places discovered during planning: (1) the route is **added to `api/routes/analytics.py`** under the existing `/api/analytics` prefix (cache key `analytics:dat`) — **no new `dat.py` router and no `api/main.py` change**; (2) frontend types + hook live in **`web/lib/analytics.ts`** (where `KrCompany`/`useKrCompanies` already live), not `lib/types.ts`/`lib/api.ts`.
+**Design source of truth:** [docs/plans/2026-05-31-dat-tracker-design.md](./2026-05-31-dat-tracker-design.md). This plan supersedes that spec's §9 file list in three places discovered by reading the actual code during planning:
+1. The route is **added to `api/routes/analytics.py`** under the existing `/api/analytics` prefix (cache key `analytics:dat`) — **no new `dat.py` router and no `api/main.py` change**.
+2. Frontend `DatCompany`/`DatData` interfaces go in **`web/lib/types.ts`** (where `KrCompany`/`KrCompaniesData` live) and the `useDat` hook in **`web/lib/api.ts`** (where `useKrCompanies` lives). There is no `lib/analytics.ts`. Hooks use the `${API}/...` URL prefix + the module-local `fetcher`.
+3. **Navbar correction (the spec was wrong):** the LIVE navbar is `web/components/nav/navbar.tsx` (props `{lang, onLangChange, connected}`, 4-language `NAV_ITEMS`, mobile drawer) — NOT `web/components/ch/navbar.tsx` (which is unused). The DAT tab is added to `NAV_ITEMS` (all 4 languages). The page shell follows the `/feed` page pattern (`Navbar` + `<main class="max-w-[1200px]...">` + `Footer`, driven by `useLang` + `usePrice` + `useRealtimePrice`), NOT `ch/app-shell` (also unused). The `.ch-*` CSS classes themselves DO exist in `globals.css` and are safe to use inside cards.
 
 **Color/threshold decisions (locked):** crypto convention green↑ (`--canton-up`) / red↓ (`--canton-down`) per existing Canton Hub tone; WCAG — never color alone, always pair with +/− sign and ▲▼. mNAV bands: `MNAV_NAV_FLOOR = 1.0` (the only structural line — below = death-spiral zone), `MNAV_WATCH_THRESHOLD = 1.2` (tunable heuristic buffer). EV mNAV formula `(market_cap + debt − cash) / nav`, falling back to `market_cap / nav` when debt and cash are both 0/None.
 
@@ -33,8 +36,9 @@
 - `web/components/dat/mnav-chart.tsx` — Recharts mNAV time-series with 1.0x reference line
 
 **Frontend (modify):**
-- `web/lib/analytics.ts` — add `DatCompany`/`DatData` interfaces + `useDat()` hook
-- `web/components/ch/navbar.tsx` — add `/dat` to `LINKS`
+- `web/lib/types.ts` — add `DatCompany`/`DatData` interfaces
+- `web/lib/api.ts` — add `useDat()` hook (+ import the new types)
+- `web/components/nav/navbar.tsx` — add `/dat` to `NAV_ITEMS` (all 4 languages)
 
 **Docs (modify, final task):**
 - `docs/ARCHITECTURE.md` (Cache Key Map + route), `docs/DATA_GUIDE.md` (Yahoo/exchangerate sources)
@@ -648,66 +652,84 @@ git commit -m "feat(dat): /api/analytics/dat endpoint with empty fallback"
 ## Task 6: Frontend types + SWR hook
 
 **Files:**
-- Modify: `web/lib/analytics.ts`
+- Modify: `web/lib/types.ts` (add interfaces)
+- Modify: `web/lib/api.ts` (add hook + import types)
 
-- [ ] **Step 1: Add types + hook**
+- [ ] **Step 1: Add types to `web/lib/types.ts`**
 
-In `web/lib/analytics.ts`, after the `useKrCompanies` hook, add:
+At the END of `web/lib/types.ts`, append:
 
 ```typescript
+export interface DatMnavPoint {
+  ts: string;
+  mnav: number;
+}
+
 export interface DatCompany {
-    ticker: string;
-    name: string;
-    exchange: string;
-    cc_holdings: number;
-    avg_buy_price: number;
-    debt: number;
-    cash: number;
-    shares_outstanding: number;
-    super_validator: boolean;
-    source: string;
-    as_of: string;
-    // computed / live (nullable when data missing)
-    stock_price: number | null;
-    market_cap: number | null;
-    cc_price: number | null;
-    nav: number | null;
-    mnav: number | null;
-    mnav_label: string | null;
-    pl_usd: number | null;
-    pl_pct: number | null;
-    krw_rate: number | null;
-    value_krw: number | null;
-    pl_krw: number | null;
-    risk: "healthy" | "watch" | "below_nav" | null;
-    mnav_history: { ts: string; mnav: number }[];
+  ticker: string;
+  name: string;
+  exchange: string;
+  cc_holdings: number;
+  avg_buy_price: number;
+  debt: number;
+  cash: number;
+  shares_outstanding: number;
+  super_validator: boolean;
+  source: string;
+  as_of: string;
+  // computed / live (nullable when data missing)
+  stock_price: number | null;
+  market_cap: number | null;
+  cc_price: number | null;
+  nav: number | null;
+  mnav: number | null;
+  mnav_label: string | null;
+  pl_usd: number | null;
+  pl_pct: number | null;
+  krw_rate: number | null;
+  value_krw: number | null;
+  pl_krw: number | null;
+  risk: "healthy" | "watch" | "below_nav" | null;
+  mnav_history: DatMnavPoint[];
 }
 
 export interface DatData {
-    companies: DatCompany[];
-    company_count: number;
-    total_cc_holdings: number;
-    total_pl_usd: number;
-    fetched_at: string | null;
-}
-
-export function useDat() {
-    return useSWR<DatData>("/api/analytics/dat", fetcher, {
-        ...SWR_OPTS,
-        refreshInterval: 60000,
-    });
+  companies: DatCompany[];
+  company_count: number;
+  total_cc_holdings: number;
+  total_pl_usd: number;
+  fetched_at: string | null;
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [ ] **Step 2: Add the hook to `web/lib/api.ts`**
+
+In `web/lib/api.ts`, add `DatData` to the type import block (lines 2-20, alongside `KrCompaniesData`):
+
+```typescript
+  KrCompaniesData,
+  DatData,
+```
+
+Then, after the `useKrCompanies` function (after line ~97), add:
+
+```typescript
+export function useDat() {
+  return useSWR<DatData>(`${API}/api/analytics/dat`, fetcher, {
+    refreshInterval: 60_000, // 1min
+  });
+}
+```
+
+- [ ] **Step 3: Type-check**
 
 Run: `cd /Users/choejaewon/project/Ozzycanton/canton-hub/web && npx tsc --noEmit`
 Expected: exit 0, no errors.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add web/lib/analytics.ts
+git add web/lib/types.ts web/lib/api.ts
 git commit -m "feat(dat): DatCompany/DatData types + useDat hook"
 ```
 
@@ -824,7 +846,7 @@ Create `web/components/dat/company-card.tsx`:
 ```tsx
 "use client";
 
-import type { DatCompany } from "@/lib/analytics";
+import type { DatCompany } from "@/lib/types";
 import { fmtUsd, fmtCc, fmtPct, fmtLargeUsd } from "@/lib/format";
 import MnavChart from "./mnav-chart";
 
@@ -941,7 +963,9 @@ git commit -m "feat(dat): company card (stats, mNAV, P/L+KRW, risk badge)"
 
 **Files:**
 - Create: `web/app/dat/page.tsx`
-- Modify: `web/components/ch/navbar.tsx`
+- Modify: `web/components/nav/navbar.tsx`
+
+The page shell mirrors `web/app/feed/page.tsx` exactly (`Navbar` with `lang/onLangChange/connected` props + `<main className="max-w-[1200px]...">` + `Footer lang`), because that is the live shell. Inside `<main>` we use the `.ch-*` classes (they exist in globals.css).
 
 - [ ] **Step 1: Create the page**
 
@@ -950,99 +974,129 @@ Create `web/app/dat/page.tsx`:
 ```tsx
 "use client";
 
-import AppShell from "@/components/ch/app-shell";
-import { useDat } from "@/lib/analytics";
-import { fmtCc, fmtLargeUsd } from "@/lib/format";
+import Navbar from "@/components/nav/navbar";
+import Footer from "@/components/footer";
 import CompanyCard from "@/components/dat/company-card";
+import { usePrice, useDat } from "@/lib/api";
+import { useRealtimePrice } from "@/lib/sse";
+import { useLang } from "@/lib/use-lang";
+import { fmtCc, fmtLargeUsd } from "@/lib/format";
 
 export default function DatPage() {
-    const { data, isLoading } = useDat();
-    const companies = data?.companies ?? [];
+  const [lang, setLang] = useLang();
+  const { data: swrPrice } = usePrice();
+  const { connected } = useRealtimePrice(swrPrice);
+  const { data, isLoading } = useDat();
 
-    const avgMnav = (() => {
-        const vals = companies.map((c) => c.mnav).filter((m): m is number => m != null);
-        if (!vals.length) return null;
-        return vals.reduce((a, b) => a + b, 0) / vals.length;
-    })();
-    const totalPlPositive = (data?.total_pl_usd ?? 0) >= 0;
+  const companies = data?.companies ?? [];
+  const avgMnav = (() => {
+    const vals = companies.map((c) => c.mnav).filter((m): m is number => m != null);
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  })();
+  const totalPlPositive = (data?.total_pl_usd ?? 0) >= 0;
 
-    return (
-        <AppShell>
-            <div className="ch-page-header">
-                <div>
-                    <h1>DAT Tracker</h1>
-                    <div className="sub">
-                        Canton 재무자산($CC)을 보유한 상장 기업 — 보유량 · mNAV · 평가손익. 참고용이며 투자 조언이 아닙니다.
-                    </div>
-                </div>
+  return (
+    <div className="min-h-screen bg-canton-bg flex flex-col">
+      <Navbar lang={lang} onLangChange={setLang} connected={connected} />
+      <main className="max-w-[1200px] w-full mx-auto px-6 py-5 flex-1">
+        <div className="ch-page-header">
+          <div>
+            <h1>DAT Tracker</h1>
+            <div className="sub">
+              Canton 재무자산($CC)을 보유한 상장 기업 — 보유량 · mNAV · 평가손익. 참고용이며 투자 조언이 아닙니다.
             </div>
+          </div>
+        </div>
 
-            {/* KPI strip */}
-            <div className="ch-kpi-strip">
-                <div className="ch-kpi">
-                    <div className="label">추적 기업</div>
-                    <div className="value-row"><span className="value">{data?.company_count ?? 0}</span></div>
-                </div>
-                <div className="ch-kpi">
-                    <div className="label">합산 $CC 보유</div>
-                    <div className="value-row"><span className="value">{fmtCc(data?.total_cc_holdings ?? 0)}</span></div>
-                </div>
-                <div className="ch-kpi">
-                    <div className="label">합산 평가손익</div>
-                    <div className="value-row">
-                        <span className="value" style={{ color: totalPlPositive ? "var(--canton-up)" : "var(--canton-down)" }}>
-                            {totalPlPositive ? "▲" : "▼"} {fmtLargeUsd(data?.total_pl_usd ?? 0)}
-                        </span>
-                    </div>
-                </div>
-                <div className="ch-kpi">
-                    <div className="label">평균 mNAV</div>
-                    <div className="value-row"><span className="value">{avgMnav != null ? `${avgMnav.toFixed(2)}x` : "—"}</span></div>
-                </div>
+        {/* KPI strip */}
+        <div className="ch-kpi-strip">
+          <div className="ch-kpi">
+            <div className="label">추적 기업</div>
+            <div className="value-row"><span className="value">{data?.company_count ?? 0}</span></div>
+          </div>
+          <div className="ch-kpi">
+            <div className="label">합산 $CC 보유</div>
+            <div className="value-row"><span className="value">{fmtCc(data?.total_cc_holdings ?? 0)}</span></div>
+          </div>
+          <div className="ch-kpi">
+            <div className="label">합산 평가손익</div>
+            <div className="value-row">
+              <span className="value" style={{ color: totalPlPositive ? "var(--canton-up)" : "var(--canton-down)" }}>
+                {totalPlPositive ? "▲" : "▼"} {fmtLargeUsd(data?.total_pl_usd ?? 0)}
+              </span>
             </div>
+          </div>
+          <div className="ch-kpi">
+            <div className="label">평균 mNAV</div>
+            <div className="value-row"><span className="value">{avgMnav != null ? `${avgMnav.toFixed(2)}x` : "—"}</span></div>
+          </div>
+        </div>
 
-            {/* Company cards */}
-            {isLoading && companies.length === 0 ? (
-                <div className="ch-skel" style={{ height: 320 }}>로딩 중</div>
-            ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
-                    {companies.map((c) => (
-                        <CompanyCard key={c.ticker} c={c} />
-                    ))}
-                </div>
-            )}
+        {/* Company cards */}
+        {isLoading && companies.length === 0 ? (
+          <div className="ch-skel" style={{ height: 320 }}>로딩 중</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+            {companies.map((c) => (
+              <CompanyCard key={c.ticker} c={c} />
+            ))}
+          </div>
+        )}
 
-            {/* Data sources */}
-            <div className="ch-card" style={{ marginTop: 24 }}>
-                <div className="ch-card-title" style={{ marginBottom: 8 }}>Data Sources</div>
-                <table className="ch-data-table">
-                    <thead>
-                        <tr><th>Data</th><th>Source</th><th>Update</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>Stock Price / Market Cap</td><td>Yahoo Finance</td><td>5 min</td></tr>
-                        <tr><td>$CC Price</td><td>CoinGecko (Canton Hub)</td><td>30 sec</td></tr>
-                        <tr><td>CC Holdings / Avg Buy</td><td>Official filings (manual)</td><td>On announcement</td></tr>
-                        <tr><td>USD/KRW</td><td>open.er-api.com</td><td>5 min</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </AppShell>
-    );
+        {/* Data sources */}
+        <div className="ch-card" style={{ marginTop: 24 }}>
+          <div className="ch-card-title" style={{ marginBottom: 8 }}>Data Sources</div>
+          <table className="ch-data-table">
+            <thead>
+              <tr><th>Data</th><th>Source</th><th>Update</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Stock Price / Market Cap</td><td>Yahoo Finance</td><td>5 min</td></tr>
+              <tr><td>$CC Price</td><td>CoinGecko (Canton Hub)</td><td>30 sec</td></tr>
+              <tr><td>CC Holdings / Avg Buy</td><td>Official filings (manual)</td><td>On announcement</td></tr>
+              <tr><td>USD/KRW</td><td>open.er-api.com</td><td>5 min</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+      <Footer lang={lang} />
+    </div>
+  );
 }
 ```
 
-- [ ] **Step 2: Add navbar tab**
+- [ ] **Step 2: Add navbar tab (all 4 languages)**
 
-In `web/components/ch/navbar.tsx`, change the `LINKS` array (lines 9-13) to add the DAT tab:
+In `web/components/nav/navbar.tsx`, add a `/dat` entry to each language array inside `NAV_ITEMS` (lines 16-37), placed between `/analytics` and `/feed`:
 
 ```typescript
-const LINKS = [
-  { href: "/", label: "대시보드" },
-  { href: "/analytics", label: "분석" },
-  { href: "/dat", label: "DAT" },
-  { href: "/feed", label: "피드" },
-];
+const NAV_ITEMS = {
+  ko: [
+    { href: "/", label: "대시보드" },
+    { href: "/analytics", label: "분석" },
+    { href: "/dat", label: "DAT" },
+    { href: "/feed", label: "피드" },
+  ],
+  en: [
+    { href: "/", label: "Dashboard" },
+    { href: "/analytics", label: "Analytics" },
+    { href: "/dat", label: "DAT" },
+    { href: "/feed", label: "Feed" },
+  ],
+  ja: [
+    { href: "/", label: "ダッシュボード" },
+    { href: "/analytics", label: "分析" },
+    { href: "/dat", label: "DAT" },
+    { href: "/feed", label: "フィード" },
+  ],
+  zh: [
+    { href: "/", label: "仪表板" },
+    { href: "/analytics", label: "分析" },
+    { href: "/dat", label: "DAT" },
+    { href: "/feed", label: "动态" },
+  ],
+};
 ```
 
 - [ ] **Step 3: Type-check + build**
@@ -1059,12 +1113,12 @@ cd /Users/choejaewon/project/Ozzycanton/canton-hub && source venv/bin/activate &
 # terminal B
 cd /Users/choejaewon/project/Ozzycanton/canton-hub/web && NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 ```
-Verify: DAT tab appears in navbar and is active on `/dat`; KPI strip + CNTN card render (values show "—" because seed is 0s — expected); toggle dark/light — colors adapt; no console errors.
+Verify: DAT tab appears in navbar (desktop + mobile drawer) and is active on `/dat`; KPI strip + CNTN card render (values show "—" because seed is 0s — expected); toggle dark/light — colors adapt; switch language — DAT tab label persists; no console errors.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add web/app/dat/page.tsx web/components/ch/navbar.tsx
+git add web/app/dat/page.tsx web/components/nav/navbar.tsx
 git commit -m "feat(dat): /dat page (KPI strip, cards, data sources) + navbar tab"
 ```
 
