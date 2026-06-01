@@ -8,7 +8,6 @@ import {
     YAxis,
     Tooltip,
     ReferenceLine,
-    Legend,
 } from "recharts";
 import type { DatPricePoint } from "@/lib/types";
 
@@ -16,7 +15,7 @@ const EMPTY: Record<string, string> = {
     ko: "주가 데이터 없음",
     en: "No price data",
     ja: "株価データなし",
-    zh: "无股价数据",
+    zh: "无株价データ",
 };
 
 const L = {
@@ -30,10 +29,12 @@ export default function PriceChart({
     data,
     lang = "en",
     inception,
+    stockColor: stockColorProp,
 }: {
     data: DatPricePoint[];
     lang?: string;
     inception?: string;
+    stockColor?: string;
 }) {
     if (!data || data.length < 2) {
         return (
@@ -43,15 +44,19 @@ export default function PriceChart({
         );
     }
     const up = data[data.length - 1].close >= data[0].close;
-    const stockColor = up ? "var(--canton-up)" : "var(--canton-down)";
+    const stockColor = stockColorProp ?? (up ? "var(--canton-up)" : "var(--canton-down)");
     const series = data.map((p) => ({ t: p.ts, close: p.close, cc: p.cc }));
-    // DAT 전환일 마커: price_history의 ts와 정확히 일치하는 가장 가까운 날짜 사용
-    const incLabel = inception && data.some((p) => p.ts >= inception) ? inception : null;
+
+    // DAT 전환일에 해당하는 실제 데이터 포인트(처음으로 inception 이상인 날짜)
+    const incTs = inception
+        ? data.find((p) => p.ts >= inception)?.ts ?? null
+        : null;
 
     return (
         <div className="ch-chart" style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={series} margin={{ top: 8, right: 4, bottom: 0, left: -10 }}>
+                {/* top margin 22: DAT 라벨이 데이터선 위 여백에 앉도록 */}
+                <ComposedChart data={series} margin={{ top: 22, right: 6, bottom: 0, left: -10 }}>
                     <XAxis
                         dataKey="t"
                         tick={{ fontSize: 10, fill: "var(--zinc-500)" }}
@@ -77,21 +82,23 @@ export default function PriceChart({
                         tick={{ fontSize: 10, fill: "var(--canton-lime)" }}
                         tickLine={false}
                         axisLine={false}
-                        width={48}
+                        width={50}
                         domain={["auto", "auto"]}
                         tickFormatter={(v) => `$${Number(v).toFixed(3)}`}
                     />
-                    {incLabel && (
+                    {incTs && (
                         <ReferenceLine
                             yAxisId="stock"
-                            x={incLabel}
+                            x={incTs}
                             stroke="var(--canton-private)"
-                            strokeDasharray="3 3"
+                            strokeWidth={1.5}
+                            strokeDasharray="4 3"
                             label={{
-                                value: t(L.dat, lang),
-                                fontSize: 9,
+                                value: `◆ ${t(L.dat, lang)}`,
+                                fontSize: 9.5,
+                                fontWeight: 600,
                                 fill: "var(--canton-private)",
-                                position: "insideTopLeft",
+                                position: "top",
                             }}
                         />
                     )}
@@ -107,22 +114,7 @@ export default function PriceChart({
                                 ? [`$${Number(v).toFixed(4)}`, t(L.cc, lang)]
                                 : [`$${Number(v).toFixed(2)}`, t(L.stock, lang)]
                         }
-                    />
-                    <Legend
-                        verticalAlign="top"
-                        height={20}
-                        iconType="plainline"
-                        wrapperStyle={{ fontSize: 10 }}
-                        formatter={(value) => (value === "cc" ? t(L.cc, lang) : t(L.stock, lang))}
-                    />
-                    <Line
-                        yAxisId="stock"
-                        type="monotone"
-                        dataKey="close"
-                        name="close"
-                        stroke={stockColor}
-                        strokeWidth={2}
-                        dot={false}
+                        labelFormatter={(l) => String(l)}
                     />
                     <Line
                         yAxisId="cc"
@@ -134,6 +126,15 @@ export default function PriceChart({
                         strokeDasharray="4 2"
                         dot={false}
                         connectNulls
+                    />
+                    <Line
+                        yAxisId="stock"
+                        type="monotone"
+                        dataKey="close"
+                        name="close"
+                        stroke={stockColor}
+                        strokeWidth={2}
+                        dot={false}
                     />
                 </ComposedChart>
             </ResponsiveContainer>
