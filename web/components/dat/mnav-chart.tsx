@@ -51,14 +51,15 @@ export default function MnavChart({
                         tick={{ fontSize: 10, fill: "var(--zinc-500)" }}
                         tickLine={false}
                         axisLine={false}
-                        width={40}
-                        domain={["auto", "auto"]}
+                        width={44}
+                        domain={[0, (max: number) => Math.max(1.1, Math.ceil(max * 10) / 10)]}
+                        tickFormatter={(v) => `${Number(v).toFixed(2)}x`}
                     />
                     <ReferenceLine
                         y={1.0}
                         stroke="var(--canton-down)"
                         strokeDasharray="4 4"
-                        label={{ value: "1.0x", fontSize: 10, fill: "var(--canton-down)", position: "right" }}
+                        label={{ value: "1.0x NAV", fontSize: 10, fill: "var(--canton-down)", position: "insideTopRight" }}
                     />
                     <Tooltip
                         contentStyle={{

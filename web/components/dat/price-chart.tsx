@@ -50,7 +50,7 @@ export default function PriceChart({
                         tick={{ fontSize: 10, fill: "var(--zinc-500)" }}
                         tickLine={false}
                         axisLine={false}
-                        width={40}
+                        width={44}
                         domain={["auto", "auto"]}
                         tickFormatter={(v) => `$${Number(v).toFixed(1)}`}
                     />
