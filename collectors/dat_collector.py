@@ -238,6 +238,11 @@ async def collect_dat(cc_price: Optional[float]) -> dict:
             stock_price, market_cap = await _fetch_stock(client, ticker)
             price_history = await _fetch_price_history(client, ticker)
 
+            # 현재가 실시간 조회가 일시 throttle돼 None이면, 방금 받은
+            # 히스토리의 마지막 종가로 폴백 → mNAV가 끊기지 않게.
+            if stock_price is None and price_history:
+                stock_price = price_history[-1].get("close")
+
             # 시총이 응답에 없으면 주가 × 발행주식수로 폴백
             shares = co.get("shares_outstanding") or 0
             if market_cap is None and stock_price is not None and shares:
