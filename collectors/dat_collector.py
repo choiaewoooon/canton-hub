@@ -147,12 +147,38 @@ async def _fetch_stock(client: httpx.AsyncClient, ticker: str) -> tuple[Optional
     return price, None
 
 
-async def _fetch_price_history(client: httpx.AsyncClient, ticker: str) -> list[dict]:
-    """Yahoo Finance chart로 6개월 일봉 종가 히스토리 조회 (키 불필요).
+async def _history_stooq(client: httpx.AsyncClient, ticker: str) -> list[dict]:
+    """stooq 일봉 히스토리 (1순위, apikey 필요). 키 없거나 실패 시 []."""
+    if not config.STOOQ_APIKEY:
+        return []
+    try:
+        r = await client.get(
+            config.STOOQ_HISTORY_URL,
+            params={"s": f"{ticker.lower()}.us", "i": "d", "apikey": config.STOOQ_APIKEY},
+            timeout=12,
+        )
+        if r.status_code != 200:
+            return []
+        lines = r.text.strip().splitlines()
+        # 헤더: Date,Open,High,Low,Close,Volume  → 키 안내 텍스트가 오면 'Date' 헤더 없음
+        if not lines or not lines[0].lower().startswith("date"):
+            logger.warning(f"stooq history {ticker}: unexpected response (apikey?)")
+            return []
+        out: list[dict] = []
+        for ln in lines[1:]:
+            cols = ln.split(",")
+            if len(cols) < 5 or cols[4] in ("", "N/D"):
+                continue
+            out.append({"ts": cols[0], "close": round(float(cols[4]), 4)})
+        # 최근 6개월(~126 거래일)만
+        return out[-126:]
+    except Exception as e:
+        logger.warning(f"stooq history fetch failed for {ticker}: {e}")
+        return []
 
-    반환: [{"ts": "YYYY-MM-DD", "close": float}, ...] (오름차순). 실패 시 [].
-    query2 호스트는 datacenter/가정용 IP 모두에서 query1보다 안정적이라 그대로 사용.
-    """
+
+async def _history_yahoo(client: httpx.AsyncClient, ticker: str) -> list[dict]:
+    """Yahoo Finance chart 6개월 일봉 (2순위 폴백, 키 불필요·429 잦음)."""
     try:
         url = f"{config.YAHOO_FINANCE_CHART_URL}/{ticker}"
         r = await client.get(url, params={"interval": "1d", "range": "6mo"}, timeout=10)
@@ -172,6 +198,17 @@ async def _fetch_price_history(client: httpx.AsyncClient, ticker: str) -> list[d
     except Exception as e:
         logger.warning(f"Yahoo history fetch failed for {ticker}: {e}")
         return []
+
+
+async def _fetch_price_history(client: httpx.AsyncClient, ticker: str) -> list[dict]:
+    """6개월 일봉 종가 히스토리. stooq(apikey) 1순위 → Yahoo 2순위.
+
+    반환: [{"ts": "YYYY-MM-DD", "close": float}, ...] (오름차순). 둘 다 실패 시 [].
+    """
+    hist = await _history_stooq(client, ticker)
+    if not hist:
+        hist = await _history_yahoo(client, ticker)
+    return hist
 
 
 async def _fetch_krw_rate(client: httpx.AsyncClient) -> Optional[float]:

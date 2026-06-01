@@ -28,7 +28,9 @@ COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY", "")
 # ============================================================
 # 주가 소스 (다중 폴백): stooq CSV 1순위(가볍고 안정적), Yahoo query2 2순위.
 # query1은 datacenter/가정용 IP 모두 429 빈발 → query2 호스트 사용.
-STOOQ_QUOTE_URL = "https://stooq.com/q/l/"  # ?s=<ticker>.us&f=sd2t2ohlcv&h&e=csv
+STOOQ_QUOTE_URL = "https://stooq.com/q/l/"  # ?s=<ticker>.us&f=sd2t2ohlcv&h&e=csv (실시간 1줄, 키 불필요)
+STOOQ_HISTORY_URL = "https://stooq.com/q/d/l/"  # ?s=<ticker>.us&i=d&apikey=... (일봉 히스토리, apikey 필요)
+STOOQ_APIKEY = os.getenv("STOOQ_APIKEY", "")  # 무료 발급: https://stooq.com/q/d/?s=cntn.us&get_apikey
 YAHOO_FINANCE_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart"
 EXCHANGERATE_API_URL = "https://open.er-api.com/v6/latest/USD"
 
