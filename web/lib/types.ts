@@ -296,6 +296,7 @@ export interface DatMnavPoint {
 export interface DatPricePoint {
   ts: string;
   close: number;
+  cc: number | null;
 }
 
 export interface DatCompany {
@@ -308,6 +309,8 @@ export interface DatCompany {
   cash: number;
   shares_outstanding: number;
   super_validator: boolean;
+  dat_inception?: string;
+  dat_inception_note?: string;
   source: string;
   as_of: string;
   // computed / live (nullable when data missing)

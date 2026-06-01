@@ -6,7 +6,7 @@ import MnavChart from "./mnav-chart";
 import PriceChart from "./price-chart";
 
 const T: Record<string, Record<string, string>> = {
-    stockChart: { ko: "주가 추이 (6개월)", en: "Stock Price (6M)", ja: "株価推移 (6ヶ月)", zh: "股价走势 (6个月)" },
+    stockChart: { ko: "주가 vs $CC (6개월)", en: "Stock vs $CC (6M)", ja: "株価 vs $CC (6ヶ月)", zh: "股价 vs $CC (6个月)" },
     mnavChart: { ko: "mNAV 추이", en: "mNAV History", ja: "mNAV推移", zh: "mNAV走势" },
     pl: { ko: "실시간 평가손익", en: "Real-time P/L", ja: "リアルタイム損益", zh: "实时盈亏" },
 };
@@ -127,7 +127,7 @@ export default function CompanyCard({ c, lang = "en" }: { c: DatCompany; lang?: 
             <div className="ch-dat-charts">
                 <div className="ch-dat-chart-row">
                     <div className="ch-card-title">{tr("stockChart", lang)}</div>
-                    <PriceChart data={c.price_history} lang={lang} />
+                    <PriceChart data={c.price_history} lang={lang} inception={c.dat_inception} />
                 </div>
                 <div className="ch-dat-chart-row">
                     <div className="ch-card-title">{tr("mnavChart", lang)}</div>

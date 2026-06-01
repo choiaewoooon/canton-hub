@@ -211,6 +211,31 @@ async def _fetch_price_history(client: httpx.AsyncClient, ticker: str) -> list[d
     return hist
 
 
+async def _fetch_cc_history(client: httpx.AsyncClient) -> dict[str, float]:
+    """$CC 6개월 일별 종가 (CoinGecko market_chart, 키 불필요).
+
+    반환: {"YYYY-MM-DD": close, ...}. 실패 시 {}.
+    주가 히스토리와 날짜로 병합하기 위해 dict로 반환.
+    """
+    try:
+        url = f"{config.COINGECKO_API_URL}/coins/{config.COINGECKO_COIN_ID}/market_chart"
+        params = {"vs_currency": "usd", "days": "180", "interval": "daily"}
+        if config.COINGECKO_API_KEY:
+            params["x_cg_demo_api_key"] = config.COINGECKO_API_KEY
+        r = await client.get(url, params=params, timeout=12)
+        if r.status_code != 200:
+            logger.warning(f"CoinGecko $CC history status {r.status_code}")
+            return {}
+        out: dict[str, float] = {}
+        for ms, price in r.json().get("prices", []):
+            day = datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+            out[day] = round(float(price), 6)  # 같은 날 여러 포인트면 마지막이 종가
+        return out
+    except Exception as e:
+        logger.warning(f"CoinGecko $CC history fetch failed: {e}")
+        return {}
+
+
 async def _fetch_krw_rate(client: httpx.AsyncClient) -> Optional[float]:
     """USD/KRW 환율. 실패 시 None."""
     try:
@@ -232,11 +257,16 @@ async def collect_dat(cc_price: Optional[float]) -> dict:
 
     async with httpx.AsyncClient(headers=_HTTP_HEADERS) as client:
         krw_rate = await _fetch_krw_rate(client)
+        cc_hist = await _fetch_cc_history(client)  # 전 회사 공통 ($CC 6개월 일별)
 
         for co in companies:
             ticker = co.get("ticker", "")
             stock_price, market_cap = await _fetch_stock(client, ticker)
             price_history = await _fetch_price_history(client, ticker)
+
+            # 주가 히스토리 각 날짜에 같은 날 $CC 종가를 병합 (이중축 차트용)
+            for pt in price_history:
+                pt["cc"] = cc_hist.get(pt["ts"])
 
             # 현재가 실시간 조회가 일시 throttle돼 None이면, 방금 받은
             # 히스토리의 마지막 종가로 폴백 → mNAV가 끊기지 않게.
