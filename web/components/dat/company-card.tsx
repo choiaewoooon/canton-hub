@@ -50,6 +50,11 @@ export default function CompanyCard({ c, lang = "en" }: { c: DatCompany; lang?: 
     const risk = c.risk ? RISK_META[c.risk] : null;
     const invested =
         c.avg_buy_price && c.cc_holdings ? c.avg_buy_price * c.cc_holdings : null;
+    // DAT 전환 마커 요약: "3.68B CC @ $0.147"
+    const inceptionTip =
+        c.cc_holdings && c.avg_buy_price
+            ? `${fmtCc(c.cc_holdings)} @ ${fmtUsd(c.avg_buy_price)}`
+            : undefined;
 
     return (
         <div className="ch-card ch-dat-hero">
@@ -134,7 +139,14 @@ export default function CompanyCard({ c, lang = "en" }: { c: DatCompany; lang?: 
                             <span className="lg"><i className="ln dash" style={{ background: "var(--canton-lime)" }} />$CC</span>
                         </div>
                     </div>
-                    <PriceChart data={c.price_history} lang={lang} inception={c.dat_inception} stockColor={plColor} />
+                    <PriceChart
+                        data={c.price_history}
+                        lang={lang}
+                        inception={c.dat_inception}
+                        inceptionTip={inceptionTip}
+                        avgBuy={c.avg_buy_price}
+                        stockColor={plColor}
+                    />
                 </div>
                 <div className="ch-dat-chart-row">
                     <div className="ch-card-title">{tr("mnavChart", lang)}</div>

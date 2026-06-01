@@ -22,6 +22,7 @@ const L = {
     stock: { ko: "주가", en: "Stock", ja: "株価", zh: "股价" },
     cc: { ko: "$CC", en: "$CC", ja: "$CC", zh: "$CC" },
     dat: { ko: "DAT 전환", en: "DAT pivot", ja: "DAT転換", zh: "DAT转型" },
+    avg: { ko: "평단", en: "Avg", ja: "平均", zh: "均价" },
 };
 const t = (m: Record<string, string>, lang: string) => m[lang] ?? m.en;
 
@@ -29,11 +30,15 @@ export default function PriceChart({
     data,
     lang = "en",
     inception,
+    inceptionTip,
+    avgBuy,
     stockColor: stockColorProp,
 }: {
     data: DatPricePoint[];
     lang?: string;
     inception?: string;
+    inceptionTip?: string; // 마커 위 작은 요약 (예: "3.68B CC @ $0.147")
+    avgBuy?: number | null; // $CC 평단 → 우축 수평 기준선
     stockColor?: string;
 }) {
     if (!data || data.length < 2) {
@@ -55,8 +60,8 @@ export default function PriceChart({
     return (
         <div className="ch-chart" style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
-                {/* top margin 22: DAT 라벨이 데이터선 위 여백에 앉도록 */}
-                <ComposedChart data={series} margin={{ top: 22, right: 6, bottom: 0, left: -10 }}>
+                {/* top margin 30: DAT 배지 2줄(라벨+요약)이 데이터선 위에 앉도록 */}
+                <ComposedChart data={series} margin={{ top: 30, right: 6, bottom: 0, left: -10 }}>
                     <XAxis
                         dataKey="t"
                         tick={{ fontSize: 10, fill: "var(--zinc-500)" }}
@@ -86,6 +91,23 @@ export default function PriceChart({
                         domain={["auto", "auto"]}
                         tickFormatter={(v) => `$${Number(v).toFixed(3)}`}
                     />
+                    {/* $CC 평단 수평 기준선 (우축) — 현재가가 평단 위/아래인지 */}
+                    {avgBuy != null && avgBuy > 0 && (
+                        <ReferenceLine
+                            yAxisId="cc"
+                            y={avgBuy}
+                            stroke="var(--canton-lime)"
+                            strokeDasharray="2 3"
+                            strokeOpacity={0.6}
+                            label={{
+                                value: `${t(L.avg, lang)} $${avgBuy.toFixed(3)}`,
+                                fontSize: 9,
+                                fill: "var(--canton-lime)",
+                                position: "insideBottomRight",
+                            }}
+                        />
+                    )}
+                    {/* DAT 전환 마커 — 세로선 + 2줄 배지(라벨 + 요약) */}
                     {incTs && (
                         <ReferenceLine
                             yAxisId="stock"
@@ -93,12 +115,33 @@ export default function PriceChart({
                             stroke="var(--canton-private)"
                             strokeWidth={1.5}
                             strokeDasharray="4 3"
-                            label={{
-                                value: `◆ ${t(L.dat, lang)}`,
-                                fontSize: 9.5,
-                                fontWeight: 600,
-                                fill: "var(--canton-private)",
-                                position: "top",
+                            label={(props) => {
+                                const vb = props.viewBox as { x: number; y: number };
+                                return (
+                                    <g>
+                                        <text
+                                            x={vb.x}
+                                            y={vb.y - 18}
+                                            textAnchor="middle"
+                                            fontSize={9.5}
+                                            fontWeight={600}
+                                            fill="var(--canton-private)"
+                                        >
+                                            ◆ {t(L.dat, lang)}
+                                        </text>
+                                        {inceptionTip && (
+                                            <text
+                                                x={vb.x}
+                                                y={vb.y - 6}
+                                                textAnchor="middle"
+                                                fontSize={8.5}
+                                                fill="var(--zinc-400)"
+                                            >
+                                                {inceptionTip}
+                                            </text>
+                                        )}
+                                    </g>
+                                );
                             }}
                         />
                     )}
