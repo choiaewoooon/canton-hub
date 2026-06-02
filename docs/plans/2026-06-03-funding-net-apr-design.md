@@ -55,7 +55,7 @@
   - 순수함수 분리(테스트 대상):
     - `netApr(grossApr, spreadSum, holdDays)`
     - `breakevenDays(grossApr, spreadSum)`
-  - `computePairs`: net 최대 페어 선택 + net/손익분기 계산. perp-perp / spot-perp 둘 다 적용.
+  - `computePairs`: **perp-perp 페어**에 net 최대 선택 + net/손익분기 계산. spot-perp는 기존 베이시스 표시 유지(현물 다리 스프레드가 펀딩 페이로드에 없어 net 비적용 — §8 참조).
   - **펀딩 테이블에 "스프레드" 칼럼** 추가 (거래소별 bid-ask %, 없으면 "—").
   - **추천 카드**: 기존 entry_spread 영역을 왕복비용 → net APR → 손익분기일 표시로 정리.
   - i18n: `netApr`, `spread`, `breakevenDays`, `holdAssumption` 등 ko/en/ja/zh 키 추가.
@@ -85,6 +85,7 @@
 - 수수료·슬리피지 비용 모델 (이번엔 스프레드만)
 - 사용자 입력 토글(수수료율·자본규모 → 개인 실손익)
 - 보유기간 슬라이더 (상수 분리로 확장 여지만 남김)
+- **spot-perp net APR** — 현물 다리 bid-ask 스프레드는 펀딩 페이로드에 없어 별도 exchanges spot join 필요. 이번엔 perp-perp만 net 적용, spot-perp는 베이시스 유지
 
 ## 9. 영향 파일 (예상)
 
