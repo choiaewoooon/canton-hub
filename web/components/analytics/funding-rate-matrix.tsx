@@ -255,9 +255,16 @@ function RecommendationCards({
       {perpPair && (
         <div className="rounded-2xl bg-zinc-900/50 border border-canton-border/60 p-5">
           <div className="text-[12px] text-zinc-400 mb-2">{t("perpPerpTitle")}</div>
-          <div className={`text-[28px] font-bold tabular-nums ${valClass(perpPair.apr)} leading-none mb-3`}>
-            {arrow(perpPair.apr)} {Math.abs(perpPair.apr).toFixed(1)}%
-            <span className="text-[12px] font-medium text-zinc-500 ml-1.5">APR</span>
+          <div className={`text-[28px] font-bold tabular-nums ${valClass(perpPair.net_apr ?? perpPair.apr)} leading-none mb-1`}>
+            {arrow(perpPair.net_apr ?? perpPair.apr)} {Math.abs(perpPair.net_apr ?? perpPair.apr).toFixed(1)}%
+            <span className="text-[12px] font-medium text-zinc-500 ml-1.5">
+              {perpPair.net_apr != null ? t("netAprLabel") : "APR"}
+            </span>
+          </div>
+          <div className="text-[11px] text-zinc-600 mb-3">
+            {perpPair.net_apr != null
+              ? `${t("colApr")} ${perpPair.apr.toFixed(1)}% · ${t("holdNote")}`
+              : t("netNa")}
           </div>
           <div className="space-y-1.5 text-[13px]">
             <div className="flex justify-between">
@@ -269,8 +276,18 @@ function RecommendationCards({
               <span className="font-medium text-zinc-200">{perpPair.long.source}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">{t("entrySpread")}</span>
-              <span className="tabular-nums text-zinc-300">{perpPair.entry_spread_pct.toFixed(3)}%</span>
+              <span className="text-zinc-500">{t("roundTripCost")}</span>
+              <span className="tabular-nums text-zinc-300">
+                {perpPair.round_trip_cost != null ? `${perpPair.round_trip_cost.toFixed(3)}%` : "—"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">{t("breakeven")}</span>
+              <span className="tabular-nums text-zinc-300">
+                {perpPair.breakeven_days != null
+                  ? `${perpPair.breakeven_days.toFixed(1)}${t("daysUnit")}`
+                  : "—"}
+              </span>
             </div>
           </div>
           {perpPair.liquidity_min_usd > 0 && (
