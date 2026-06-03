@@ -5,6 +5,7 @@ import { useFundingRates, useRealtimePrices } from "@/lib/api";
 import type { FundingRate, LivePrice } from "@/lib/types";
 import { formatAgo, formatDuration, fmtLargeUsd } from "@/lib/format";
 import { makeT } from "./funding-rate-matrix.i18n";
+import { roundTripCost, netApr, breakevenDays, HOLD_DAYS_DEFAULT } from "./funding-net";
 
 // ---------------------------------------------------------------------------
 // Toss-style color helpers
@@ -21,9 +22,12 @@ const arrow = (n: number) => (n >= 0 ? "▲" : "▼");
 interface PerpPairResult {
   short: FundingRate;
   long: FundingRate;
-  apr: number;
-  entry_spread_pct: number;
+  apr: number;              // gross APR (short.fr_apr - long.fr_apr)
+  entry_spread_pct: number; // 거래소 간 perp 가격 괴리 (참고용 유지)
   liquidity_min_usd: number;
+  round_trip_cost: number | null; // 왕복 체결비용% (양다리 스프레드 합)
+  net_apr: number | null;         // net APR (기본 7일)
+  breakeven_days: number | null;  // 손익분기 보유일
 }
 
 interface SpotPerpPairResult {
@@ -100,18 +104,42 @@ function minSpotPerpDepth(prices: LivePrice[], spotSrc: string, perpSrc: string)
 function computePairs(rates: FundingRate[], prices: LivePrice[]): ComputedPairs {
   const sorted = [...rates].sort((a, b) => b.fr_apr - a.fr_apr);
 
-  // Perp-Perp: highest FR (short) vs lowest FR (long)
+  // Perp-Perp: net APR 최대 페어 선택.
+  // 후보 = short.fr_apr > long.fr_apr (gross>0) 인 모든 순서쌍.
+  // 스프레드 양쪽 다 있는 후보 중 net 최대를 고른다.
+  // 스프레드 데이터가 전혀 없으면 gross 최대(최고FR 숏 × 최저FR 롱)로 폴백.
   let perpPair: PerpPairResult | null = null;
   if (sorted.length >= 2) {
-    const short = sorted[0];
-    const long = sorted[sorted.length - 1];
-    perpPair = {
-      short,
-      long,
-      apr: short.fr_apr - long.fr_apr,
-      entry_spread_pct: priceSpread(prices, short.source, long.source),
-      liquidity_min_usd: minDepth(prices, short.source, long.source),
+    const build = (short: FundingRate, long: FundingRate): PerpPairResult => {
+      const gross = short.fr_apr - long.fr_apr;
+      const cost = roundTripCost(short.spread_pct, long.spread_pct);
+      return {
+        short,
+        long,
+        apr: gross,
+        entry_spread_pct: priceSpread(prices, short.source, long.source),
+        liquidity_min_usd: minDepth(prices, short.source, long.source),
+        round_trip_cost: cost,
+        net_apr: netApr(gross, cost),
+        breakeven_days: breakevenDays(gross, cost),
+      };
     };
+
+    const candidates: PerpPairResult[] = [];
+    for (const short of sorted) {
+      for (const long of sorted) {
+        if (short.source === long.source) continue;
+        if (short.fr_apr - long.fr_apr <= 0) continue;
+        candidates.push(build(short, long));
+      }
+    }
+    const withNet = candidates.filter((c) => c.net_apr != null);
+    if (withNet.length > 0) {
+      perpPair = withNet.reduce((a, b) => (b.net_apr! > a.net_apr! ? b : a));
+    } else {
+      // 스프레드 데이터 없음 → gross 최대로 폴백 (기존 동작)
+      perpPair = build(sorted[0], sorted[sorted.length - 1]);
+    }
   }
 
   // Spot-Perp: highest positive FR perp + cheapest spot
