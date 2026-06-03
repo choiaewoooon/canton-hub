@@ -7,7 +7,6 @@ export const TEXTS = {
   longLabel:         { ko: "롱",                            en: "Long" },
   shortLabel:        { ko: "숏",                            en: "Short" },
   spotBuyLabel:      { ko: "현물 매수",                     en: "Spot Buy" },
-  entrySpread:       { ko: "진입스프",                      en: "Entry spread" },
   basis:             { ko: "베이시스",                      en: "Basis" },
   orderbookDepth:    { ko: "호가창",                        en: "Order depth" },
   colExchange:       { ko: "거래소",                        en: "Exchange" },

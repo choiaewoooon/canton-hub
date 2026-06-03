@@ -120,7 +120,7 @@ function computePairs(rates: FundingRate[], prices: LivePrice[]): ComputedPairs 
         entry_spread_pct: priceSpread(prices, short.source, long.source),
         liquidity_min_usd: minDepth(prices, short.source, long.source),
         round_trip_cost: cost,
-        net_apr: netApr(gross, cost),
+        net_apr: netApr(gross, cost, HOLD_DAYS_DEFAULT),
         breakeven_days: breakevenDays(gross, cost),
       };
     };
@@ -137,8 +137,12 @@ function computePairs(rates: FundingRate[], prices: LivePrice[]): ComputedPairs 
     if (withNet.length > 0) {
       perpPair = withNet.reduce((a, b) => (b.net_apr! > a.net_apr! ? b : a));
     } else {
-      // 스프레드 데이터 없음 → gross 최대로 폴백 (기존 동작)
-      perpPair = build(sorted[0], sorted[sorted.length - 1]);
+      // 스프레드 데이터 없음 → gross 최대 폴백: 최고FR 숏 × 다른 소스의 최저FR 롱
+      const short = sorted[0];
+      const long =
+        [...sorted].reverse().find((r) => r.source !== short.source) ??
+        sorted[sorted.length - 1];
+      perpPair = build(short, long);
     }
   }
 
