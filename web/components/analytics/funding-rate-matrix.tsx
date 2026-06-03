@@ -357,12 +357,13 @@ function FundingRateTable({
   const sorted = [...rates].sort((a, b) => b.fr_apr - a.fr_apr);
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-[520px]">
       {/* Header row */}
-      <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-1 pb-2 border-b border-canton-border/60">
+      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-4 px-1 pb-2 border-b border-canton-border/60">
         <span className="text-[11px] text-zinc-500">{t("colExchange")}</span>
         <span className="text-[11px] text-zinc-500 text-right">{t("colFrRaw")}</span>
         <span className="text-[11px] text-zinc-500 text-right">{t("colApr")}</span>
+        <span className="text-[11px] text-zinc-500 text-right">{t("colSpread")}</span>
         <span className="text-[11px] text-zinc-500 text-right">{t("colNextFunding")}</span>
         <span className="text-[11px] text-zinc-500 text-right">{t("colTrade")}</span>
       </div>
@@ -380,7 +381,7 @@ function FundingRateTable({
         return (
           <div
             key={r.source}
-            className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 items-center px-1 py-3.5 border-b border-canton-border/60 hover:bg-zinc-900/40 transition-colors"
+            className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-4 items-center px-1 py-3.5 border-b border-canton-border/60 hover:bg-zinc-900/40 transition-colors"
           >
             {/* Exchange */}
             <div>
@@ -402,6 +403,13 @@ function FundingRateTable({
             <div className="text-right">
               <span className={`text-[15px] font-bold tabular-nums ${valClass(r.fr_apr)}`}>
                 {arrow(r.fr_apr)}&thinsp;{Math.abs(r.fr_apr).toFixed(1)}%
+              </span>
+            </div>
+
+            {/* Spread */}
+            <div className="text-right">
+              <span className="text-[12px] tabular-nums font-mono text-zinc-400">
+                {r.spread_pct != null ? `${r.spread_pct.toFixed(3)}%` : "—"}
               </span>
             </div>
 
