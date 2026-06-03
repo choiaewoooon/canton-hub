@@ -21,6 +21,13 @@ export const TEXTS = {
   loading:           { ko: "데이터 수집 중...",             en: "Collecting data..." },
   noArbitrage:       { ko: "현재 양빵 적합 페어 없음 (모든 FR 음수)",
                        en: "No suitable arbitrage pair (all FR negative)" },
+  colSpread:         { ko: "스프레드",                      en: "Spread" },
+  netAprLabel:       { ko: "Net APR",                       en: "Net APR" },
+  roundTripCost:     { ko: "왕복비용",                      en: "Round-trip cost" },
+  breakeven:         { ko: "손익분기",                      en: "Break-even" },
+  daysUnit:          { ko: "일",                            en: "d" },
+  netNa:             { ko: "스프레드 없음",                 en: "No spread data" },
+  holdNote:          { ko: "기본 7일 보유 가정",            en: "Assumes 7-day hold" },
 } as const;
 
 export type TextKey = keyof typeof TEXTS;
