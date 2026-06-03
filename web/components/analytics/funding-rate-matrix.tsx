@@ -5,6 +5,7 @@ import { useFundingRates, useRealtimePrices } from "@/lib/api";
 import type { FundingRate, LivePrice } from "@/lib/types";
 import { formatAgo, formatDuration, fmtLargeUsd } from "@/lib/format";
 import { makeT } from "./funding-rate-matrix.i18n";
+import { roundTripCost, netApr, breakevenDays, HOLD_DAYS_DEFAULT } from "./funding-net";
 
 // ---------------------------------------------------------------------------
 // Toss-style color helpers
@@ -21,9 +22,12 @@ const arrow = (n: number) => (n >= 0 ? "▲" : "▼");
 interface PerpPairResult {
   short: FundingRate;
   long: FundingRate;
-  apr: number;
-  entry_spread_pct: number;
+  apr: number;              // gross APR (short.fr_apr - long.fr_apr)
+  entry_spread_pct: number; // 거래소 간 perp 가격 괴리 (참고용 유지)
   liquidity_min_usd: number;
+  round_trip_cost: number | null; // 왕복 체결비용% (양다리 스프레드 합)
+  net_apr: number | null;         // net APR (기본 7일)
+  breakeven_days: number | null;  // 손익분기 보유일
 }
 
 interface SpotPerpPairResult {
@@ -100,18 +104,46 @@ function minSpotPerpDepth(prices: LivePrice[], spotSrc: string, perpSrc: string)
 function computePairs(rates: FundingRate[], prices: LivePrice[]): ComputedPairs {
   const sorted = [...rates].sort((a, b) => b.fr_apr - a.fr_apr);
 
-  // Perp-Perp: highest FR (short) vs lowest FR (long)
+  // Perp-Perp: net APR 최대 페어 선택.
+  // 후보 = short.fr_apr > long.fr_apr (gross>0) 인 모든 순서쌍.
+  // 스프레드 양쪽 다 있는 후보 중 net 최대를 고른다.
+  // 스프레드 데이터가 전혀 없으면 gross 최대(최고FR 숏 × 최저FR 롱)로 폴백.
   let perpPair: PerpPairResult | null = null;
   if (sorted.length >= 2) {
-    const short = sorted[0];
-    const long = sorted[sorted.length - 1];
-    perpPair = {
-      short,
-      long,
-      apr: short.fr_apr - long.fr_apr,
-      entry_spread_pct: priceSpread(prices, short.source, long.source),
-      liquidity_min_usd: minDepth(prices, short.source, long.source),
+    const build = (short: FundingRate, long: FundingRate): PerpPairResult => {
+      const gross = short.fr_apr - long.fr_apr;
+      const cost = roundTripCost(short.spread_pct, long.spread_pct);
+      return {
+        short,
+        long,
+        apr: gross,
+        entry_spread_pct: priceSpread(prices, short.source, long.source),
+        liquidity_min_usd: minDepth(prices, short.source, long.source),
+        round_trip_cost: cost,
+        net_apr: netApr(gross, cost, HOLD_DAYS_DEFAULT),
+        breakeven_days: breakevenDays(gross, cost),
+      };
     };
+
+    const candidates: PerpPairResult[] = [];
+    for (const short of sorted) {
+      for (const long of sorted) {
+        if (short.source === long.source) continue;
+        if (short.fr_apr - long.fr_apr <= 0) continue;
+        candidates.push(build(short, long));
+      }
+    }
+    const withNet = candidates.filter((c) => c.net_apr != null);
+    if (withNet.length > 0) {
+      perpPair = withNet.reduce((a, b) => (b.net_apr! > a.net_apr! ? b : a));
+    } else {
+      // 스프레드 데이터 없음 → gross 최대 폴백: 최고FR 숏 × 다른 소스의 최저FR 롱
+      const short = sorted[0];
+      const long =
+        [...sorted].reverse().find((r) => r.source !== short.source) ??
+        sorted[sorted.length - 1];
+      perpPair = build(short, long);
+    }
   }
 
   // Spot-Perp: highest positive FR perp + cheapest spot
@@ -227,9 +259,16 @@ function RecommendationCards({
       {perpPair && (
         <div className="rounded-2xl bg-zinc-900/50 border border-canton-border/60 p-5">
           <div className="text-[12px] text-zinc-400 mb-2">{t("perpPerpTitle")}</div>
-          <div className={`text-[28px] font-bold tabular-nums ${valClass(perpPair.apr)} leading-none mb-3`}>
-            {arrow(perpPair.apr)} {Math.abs(perpPair.apr).toFixed(1)}%
-            <span className="text-[12px] font-medium text-zinc-500 ml-1.5">APR</span>
+          <div className={`text-[28px] font-bold tabular-nums ${valClass(perpPair.net_apr ?? perpPair.apr)} leading-none mb-1`}>
+            {arrow(perpPair.net_apr ?? perpPair.apr)} {Math.abs(perpPair.net_apr ?? perpPair.apr).toFixed(1)}%
+            <span className="text-[12px] font-medium text-zinc-500 ml-1.5">
+              {perpPair.net_apr != null ? t("netAprLabel") : "APR"}
+            </span>
+          </div>
+          <div className="text-[11px] text-zinc-600 mb-3">
+            {perpPair.net_apr != null
+              ? `${t("colApr")} ${perpPair.apr.toFixed(1)}% · ${t("holdNote")}`
+              : t("netNa")}
           </div>
           <div className="space-y-1.5 text-[13px]">
             <div className="flex justify-between">
@@ -241,8 +280,18 @@ function RecommendationCards({
               <span className="font-medium text-zinc-200">{perpPair.long.source}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">{t("entrySpread")}</span>
-              <span className="tabular-nums text-zinc-300">{perpPair.entry_spread_pct.toFixed(3)}%</span>
+              <span className="text-zinc-500">{t("roundTripCost")}</span>
+              <span className="tabular-nums text-zinc-300">
+                {perpPair.round_trip_cost != null ? `${perpPair.round_trip_cost.toFixed(3)}%` : "—"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">{t("breakeven")}</span>
+              <span className="tabular-nums text-zinc-300">
+                {perpPair.breakeven_days != null
+                  ? `${perpPair.breakeven_days.toFixed(1)}${t("daysUnit")}`
+                  : "—"}
+              </span>
             </div>
           </div>
           {perpPair.liquidity_min_usd > 0 && (
@@ -312,12 +361,13 @@ function FundingRateTable({
   const sorted = [...rates].sort((a, b) => b.fr_apr - a.fr_apr);
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-[520px]">
       {/* Header row */}
-      <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-1 pb-2 border-b border-canton-border/60">
+      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-4 px-1 pb-2 border-b border-canton-border/60">
         <span className="text-[11px] text-zinc-500">{t("colExchange")}</span>
         <span className="text-[11px] text-zinc-500 text-right">{t("colFrRaw")}</span>
         <span className="text-[11px] text-zinc-500 text-right">{t("colApr")}</span>
+        <span className="text-[11px] text-zinc-500 text-right">{t("colSpread")}</span>
         <span className="text-[11px] text-zinc-500 text-right">{t("colNextFunding")}</span>
         <span className="text-[11px] text-zinc-500 text-right">{t("colTrade")}</span>
       </div>
@@ -335,7 +385,7 @@ function FundingRateTable({
         return (
           <div
             key={r.source}
-            className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 items-center px-1 py-3.5 border-b border-canton-border/60 hover:bg-zinc-900/40 transition-colors"
+            className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-4 items-center px-1 py-3.5 border-b border-canton-border/60 hover:bg-zinc-900/40 transition-colors"
           >
             {/* Exchange */}
             <div>
@@ -357,6 +407,13 @@ function FundingRateTable({
             <div className="text-right">
               <span className={`text-[15px] font-bold tabular-nums ${valClass(r.fr_apr)}`}>
                 {arrow(r.fr_apr)}&thinsp;{Math.abs(r.fr_apr).toFixed(1)}%
+              </span>
+            </div>
+
+            {/* Spread */}
+            <div className="text-right">
+              <span className="text-[12px] tabular-nums font-mono text-zinc-400">
+                {r.spread_pct != null ? `${r.spread_pct.toFixed(3)}%` : "—"}
               </span>
             </div>
 

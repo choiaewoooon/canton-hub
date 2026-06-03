@@ -196,3 +196,48 @@ async def test_funding_rates_route_empty_cache():
     assert resp.status_code == 200
     assert resp.json() == {"rates": [], "updated_at": None}
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_funding_rates_route_joins_spread_from_exchanges():
+    cache = TTLCache()
+    cache.set("analytics:funding-rates", {
+        "rates": [
+            {"source": "Binance Perp", "fr_apr": 30.0},
+            {"source": "Hyperliquid", "fr_apr": 12.0},
+        ],
+        "updated_at": "2026-06-03T10:00:00",
+    }, ttl=90)
+    cache.set("analytics:exchanges", {
+        "spot": [],
+        "derivatives": [
+            {"exchange": "Binance (Futures)", "spread_pct": 0.08},
+            {"exchange": "Hyperliquid (Futures)", "spread_pct": 0.15},
+        ],
+    }, ttl=90)
+    app.dependency_overrides[get_cache] = lambda: cache
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/api/analytics/funding-rates")
+    body = resp.json()
+    app.dependency_overrides.clear()
+    rates = {r["source"]: r for r in body["rates"]}
+    assert rates["Binance Perp"]["spread_pct"] == pytest.approx(0.08)
+    assert rates["Hyperliquid"]["spread_pct"] == pytest.approx(0.15)
+
+
+@pytest.mark.asyncio
+async def test_funding_rates_route_spread_none_when_exchange_missing():
+    cache = TTLCache()
+    cache.set("analytics:funding-rates", {
+        "rates": [{"source": "Lighter", "fr_apr": 28.0}],
+        "updated_at": "2026-06-03T10:00:00",
+    }, ttl=90)
+    cache.set("analytics:exchanges", {"spot": [], "derivatives": []}, ttl=90)
+    app.dependency_overrides[get_cache] = lambda: cache
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/api/analytics/funding-rates")
+    body = resp.json()
+    app.dependency_overrides.clear()
+    assert body["rates"][0]["spread_pct"] is None

@@ -95,7 +95,9 @@ _EMPTY_FUNDING = {"rates": [], "updated_at": None}
 
 @router.get("/funding-rates")
 async def funding_rates(cache: TTLCache = Depends(get_cache)):
-    return cache.get("analytics:funding-rates") or _EMPTY_FUNDING
+    data = cache.get("analytics:funding-rates") or _EMPTY_FUNDING
+    exchanges = cache.get("analytics:exchanges")
+    return _enrich_funding_with_spread(data, exchanges)
 
 
 @router.get("/kpi-history")
@@ -133,6 +135,29 @@ _DEPTH_SOURCE_MAP: dict[tuple[str, str], tuple[str, str]] = {
     ("OKX Perp", "perpetual"): ("OKX (Futures)", "derivatives"),
     ("Binance Perp", "perpetual"): ("Binance (Futures)", "derivatives"),
 }
+
+
+def _enrich_funding_with_spread(funding_data: dict, exchanges_data: dict | None) -> dict:
+    """각 funding rate row에 거래소 bid-ask spread_pct를 join (없으면 None).
+    _DEPTH_SOURCE_MAP을 재사용 — funding source는 모두 perpetual."""
+    if not exchanges_data:
+        return funding_data
+    lookups: dict[tuple[str, str], dict] = {}
+    for bucket in ("spot", "derivatives"):
+        for entry in exchanges_data.get(bucket, []):
+            key = (entry.get("exchange"), bucket)
+            if key not in lookups:
+                lookups[key] = entry
+    enriched = []
+    for r in funding_data.get("rates", []):
+        mapping = _DEPTH_SOURCE_MAP.get((r.get("source", ""), "perpetual"))
+        spread = None
+        if mapping:
+            entry = lookups.get(mapping)
+            if entry is not None:
+                spread = entry.get("spread_pct")
+        enriched.append({**r, "spread_pct": spread})
+    return {**funding_data, "rates": enriched}
 
 
 def _enrich_with_depth(rt_data: dict, exchanges_data: dict | None) -> dict:
