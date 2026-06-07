@@ -5,11 +5,13 @@ export function fmtUsd(n: number | null): string {
 }
 
 export function fmtLargeUsd(n: number | null): string {
-  if (n === null) return "N/A";
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toFixed(2)}`;
+  if (n == null || Number.isNaN(n)) return "N/A";
+  const sign = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  if (a >= 1_000_000_000) return `${sign}$${(a / 1_000_000_000).toFixed(2)}B`;
+  if (a >= 1_000_000) return `${sign}$${(a / 1_000_000).toFixed(1)}M`;
+  if (a >= 1_000) return `${sign}$${(a / 1_000).toFixed(0)}K`;
+  return `${sign}$${a.toFixed(2)}`;
 }
 
 export function fmtCc(n: number | null): string {

@@ -24,7 +24,7 @@ export default function BmSection({ network }: BmSectionProps) {
   const netChange = (mint || 0) - (burn || 0);
 
   return (
-    <div className="grid grid-cols-[2fr_1fr] gap-3 mb-5">
+    <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3 mb-5">
       {/* Left: B/M Ratio Trend */}
       <div className="bg-canton-card border border-canton-border rounded-[10px] p-4">
         <div className="flex justify-between items-center mb-3">

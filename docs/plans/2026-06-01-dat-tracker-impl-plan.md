@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.12 / FastAPI / httpx / APScheduler-style asyncio loops / pytest (backend); Next.js 16 / React 19 / TypeScript / Tailwind v4 / Recharts / SWR (frontend).
 
+**Mobile-first (decided):** The `/dat` page must be built mobile-first and verified at **360px** width — no horizontal overflow (`document.documentElement.scrollWidth <= window.innerWidth`). Concretely: the company-card grid uses `minmax(min(100%, 340px), 1fr)` (NOT bare `340px`, which overflows a 360px viewport once the `max-w-[1200px] px-6` gutters are subtracted); the `.ch-kpi-strip` already collapses to 2-col at ≤860px via globals.css; the Data Sources `.ch-data-table` gets a horizontal-scroll wrapper. This mirrors the project's mobile-first pattern in [note-mobile-web-optimization]. Separate `/analytics`·`/feed` mobile work is out of scope here (future branch).
+
 **Design source of truth:** [docs/plans/2026-05-31-dat-tracker-design.md](./2026-05-31-dat-tracker-design.md). This plan supersedes that spec's §9 file list in three places discovered by reading the actual code during planning:
 1. The route is **added to `api/routes/analytics.py`** under the existing `/api/analytics` prefix (cache key `analytics:dat`) — **no new `dat.py` router and no `api/main.py` change**.
 2. Frontend `DatCompany`/`DatData` interfaces go in **`web/lib/types.ts`** (where `KrCompany`/`KrCompaniesData` live) and the `useDat` hook in **`web/lib/api.ts`** (where `useKrCompanies` lives). There is no `lib/analytics.ts`. Hooks use the `${API}/...` URL prefix + the module-local `fetcher`.
@@ -1037,7 +1039,7 @@ export default function DatPage() {
         {isLoading && companies.length === 0 ? (
           <div className="ch-skel" style={{ height: 320 }}>로딩 중</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 16 }}>
             {companies.map((c) => (
               <CompanyCard key={c.ticker} c={c} />
             ))}
@@ -1047,17 +1049,19 @@ export default function DatPage() {
         {/* Data sources */}
         <div className="ch-card" style={{ marginTop: 24 }}>
           <div className="ch-card-title" style={{ marginBottom: 8 }}>Data Sources</div>
-          <table className="ch-data-table">
-            <thead>
-              <tr><th>Data</th><th>Source</th><th>Update</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>Stock Price / Market Cap</td><td>Yahoo Finance</td><td>5 min</td></tr>
-              <tr><td>$CC Price</td><td>CoinGecko (Canton Hub)</td><td>30 sec</td></tr>
-              <tr><td>CC Holdings / Avg Buy</td><td>Official filings (manual)</td><td>On announcement</td></tr>
-              <tr><td>USD/KRW</td><td>open.er-api.com</td><td>5 min</td></tr>
-            </tbody>
-          </table>
+          <div style={{ overflowX: "auto" }}>
+            <table className="ch-data-table" style={{ minWidth: 360 }}>
+              <thead>
+                <tr><th>Data</th><th>Source</th><th>Update</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Stock Price / Market Cap</td><td>Yahoo Finance</td><td>5 min</td></tr>
+                <tr><td>$CC Price</td><td>CoinGecko (Canton Hub)</td><td>30 sec</td></tr>
+                <tr><td>CC Holdings / Avg Buy</td><td>Official filings (manual)</td><td>On announcement</td></tr>
+                <tr><td>USD/KRW</td><td>open.er-api.com</td><td>5 min</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </main>
       <Footer lang={lang} />
@@ -1114,6 +1118,8 @@ cd /Users/choejaewon/project/Ozzycanton/canton-hub && source venv/bin/activate &
 cd /Users/choejaewon/project/Ozzycanton/canton-hub/web && NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 ```
 Verify: DAT tab appears in navbar (desktop + mobile drawer) and is active on `/dat`; KPI strip + CNTN card render (values show "—" because seed is 0s — expected); toggle dark/light — colors adapt; switch language — DAT tab label persists; no console errors.
+
+**Mobile check (360px):** resize the viewport to 360px (or DevTools device toolbar) and confirm NO horizontal scroll. In the console run `document.documentElement.scrollWidth <= window.innerWidth` → must be `true`. The card grid should be a single column, the KPI strip 2×2, and the Data Sources table should scroll horizontally inside its wrapper without pushing the page wide.
 
 - [ ] **Step 5: Commit**
 

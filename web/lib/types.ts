@@ -288,3 +288,53 @@ export interface GovernanceData {
   history_stats: Record<string, HistoryStat>;
   recent_cips: CIPItem[];
 }
+
+export interface DatMnavPoint {
+  ts: string;
+  mnav: number;
+}
+
+export interface DatPricePoint {
+  ts: string;
+  close: number;
+  cc: number | null;
+}
+
+export interface DatCompany {
+  ticker: string;
+  name: string;
+  exchange: string;
+  cc_holdings: number;
+  avg_buy_price: number;
+  debt: number;
+  cash: number;
+  shares_outstanding: number;
+  super_validator: boolean;
+  dat_inception?: string;
+  dat_inception_note?: string;
+  source: string;
+  as_of: string;
+  // computed / live (nullable when data missing)
+  stock_price: number | null;
+  market_cap: number | null;
+  cc_price: number | null;
+  nav: number | null;
+  mnav: number | null;
+  mnav_label: string | null;
+  pl_usd: number | null;
+  pl_pct: number | null;
+  krw_rate: number | null;
+  value_krw: number | null;
+  pl_krw: number | null;
+  risk: "healthy" | "watch" | "below_nav" | null;
+  mnav_history: DatMnavPoint[];
+  price_history: DatPricePoint[];
+}
+
+export interface DatData {
+  companies: DatCompany[];
+  company_count: number;
+  total_cc_holdings: number;
+  total_pl_usd: number;
+  fetched_at: string | null;
+}

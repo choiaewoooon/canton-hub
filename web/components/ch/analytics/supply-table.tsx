@@ -68,7 +68,8 @@ export default function SupplyTable() {
       {isLoading ? (
         <div className="ch-skel" style={{ height: 240, marginTop: 12 }} />
       ) : (
-        <table className="ch-data-table">
+        <div className="overflow-x-auto -mx-1 px-1">
+        <table className="ch-data-table min-w-[480px]">
           <thead>
             <tr>
               <th>Date (UTC)</th>
@@ -103,6 +104,7 @@ export default function SupplyTable() {
             })}
           </tbody>
         </table>
+        </div>
       )}
       {isFallback && !isLoading && (
         <div style={{ fontSize: 10, color: "var(--zinc-600)", marginTop: 8 }}>

@@ -361,7 +361,8 @@ function FundingRateTable({
   const sorted = [...rates].sort((a, b) => b.fr_apr - a.fr_apr);
 
   return (
-    <div className="w-full min-w-[520px]">
+    <div className="w-full overflow-x-auto -mx-1 px-1">
+      <div className="min-w-[520px]">
       {/* Header row */}
       <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-4 px-1 pb-2 border-b border-canton-border/60">
         <span className="text-[11px] text-zinc-500">{t("colExchange")}</span>
@@ -440,6 +441,7 @@ function FundingRateTable({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

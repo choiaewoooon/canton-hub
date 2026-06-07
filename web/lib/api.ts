@@ -14,6 +14,7 @@ import type {
   RealtimePrices,
   HoldersData,
   KrCompaniesData,
+  DatData,
   TrendingData,
   KpiHistoryData,
   FundingRates,
@@ -93,6 +94,12 @@ export function useHolders() {
 export function useKrCompanies() {
   return useSWR<KrCompaniesData>(`${API}/api/analytics/kr-companies`, fetcher, {
     refreshInterval: 1_800_000, // 30min
+  });
+}
+
+export function useDat() {
+  return useSWR<DatData>(`${API}/api/analytics/dat`, fetcher, {
+    refreshInterval: 60_000, // 1min
   });
 }
 

@@ -17,21 +17,25 @@ const NAV_ITEMS = {
   ko: [
     { href: "/", label: "대시보드" },
     { href: "/analytics", label: "분석" },
+    { href: "/dat", label: "DAT" },
     { href: "/feed", label: "피드" },
   ],
   en: [
     { href: "/", label: "Dashboard" },
     { href: "/analytics", label: "Analytics" },
+    { href: "/dat", label: "DAT" },
     { href: "/feed", label: "Feed" },
   ],
   ja: [
     { href: "/", label: "ダッシュボード" },
     { href: "/analytics", label: "分析" },
+    { href: "/dat", label: "DAT" },
     { href: "/feed", label: "フィード" },
   ],
   zh: [
     { href: "/", label: "仪表板" },
     { href: "/analytics", label: "分析" },
+    { href: "/dat", label: "DAT" },
     { href: "/feed", label: "动态" },
   ],
 };

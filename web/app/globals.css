@@ -338,6 +338,76 @@ select.ch-btn-nav { padding: 5px 8px; outline: none; font-family: inherit; }
   font-size: 9px; color: var(--zinc-500);
 }
 
+/* ============================================================
+ * DAT Tracker-specific — full-width treasury hero
+ * (borrows deathspiral's monitor framing, keeps Canton Hub tone)
+ * ============================================================ */
+.ch-dat-list { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+
+.ch-dat-hero { padding: 0; overflow: hidden; }
+.ch-dat-hero-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--canton-border);
+  flex-wrap: wrap;
+}
+.ch-dat-hero-id { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ch-dat-hero-id .tkr { font-size: 18px; font-weight: 700; color: var(--zinc-50); letter-spacing: -0.01em; }
+.ch-dat-hero-id .nm { font-size: 13px; color: var(--zinc-500); }
+
+.ch-dat-grid {
+  display: grid; grid-template-columns: 1.2fr 1fr 1.2fr;
+  gap: 1px; background: var(--canton-border);
+}
+.ch-dat-cell {
+  background: var(--canton-card); padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 8px; min-width: 0;
+}
+.ch-dat-cell .big {
+  font-size: 30px; font-weight: 600; line-height: 1.05;
+  color: var(--zinc-50); letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+}
+.ch-dat-cell .big.private { color: var(--canton-private); }
+.ch-dat-cell .row-stats {
+  display: flex; gap: 18px; margin-top: auto; padding-top: 12px;
+  border-top: 1px solid var(--canton-border); font-size: 11px; flex-wrap: wrap;
+}
+.ch-dat-cell .row-stats .stat { display: flex; flex-direction: column; gap: 2px; }
+.ch-dat-cell .row-stats .k { color: var(--zinc-500); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+.ch-dat-cell .row-stats .v { color: var(--zinc-200); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* mNAV gauge — 0..2x track, 1.0x reference tick, pointer colored by risk */
+.ch-mnav-gauge { position: relative; height: 34px; margin-top: 2px; }
+.ch-mnav-gauge .track {
+  position: absolute; inset: 9px 0 auto 0; height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--canton-down) 0%, var(--canton-burn) 50%, var(--canton-up) 100%);
+  opacity: 0.4;
+}
+.ch-mnav-gauge .ref { position: absolute; top: 4px; height: 16px; width: 2px; background: var(--zinc-400); left: 50%; }
+.ch-mnav-gauge .ref-label { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--zinc-500); }
+.ch-mnav-gauge .pointer {
+  position: absolute; top: 5px; width: 12px; height: 12px; border-radius: 50%;
+  transform: translateX(-50%); border: 2px solid var(--canton-card);
+  box-shadow: 0 0 0 1px var(--canton-border);
+}
+.ch-mnav-gauge .axis { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; font-size: 9px; color: var(--zinc-600); }
+
+.ch-dat-charts { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--canton-border); }
+.ch-dat-charts .ch-dat-chart-row:first-child { border-right: 1px solid var(--canton-border); }
+.ch-dat-chart-row { padding: 16px 18px; }
+.ch-dat-chart-row .ch-card-title { margin-bottom: 10px; }
+.ch-chart-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.ch-chart-head-row .ch-card-title { margin-bottom: 0; }
+.ch-chart-legend { display: flex; gap: 12px; }
+.ch-chart-legend .lg { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: var(--zinc-500); }
+.ch-chart-legend .ln { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.ch-chart-legend .ln.dash { background-image: none; -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px); mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px); }
+
+@media (max-width: 860px) {
+  .ch-dat-grid { grid-template-columns: 1fr; }
+  .ch-dat-charts { grid-template-columns: 1fr; }
+  .ch-dat-charts .ch-dat-chart-row:first-child { border-right: none; border-bottom: 1px solid var(--canton-border); }
+}
+
 .ch-priv-bar-wrap { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .ch-priv-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--zinc-900); }
 .ch-priv-bar .fill { height: 100%; background: linear-gradient(90deg, #7c3aed, #a78bfa); }

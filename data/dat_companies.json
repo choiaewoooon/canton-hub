@@ -1,0 +1,17 @@
+[
+  {
+    "ticker": "CNTN",
+    "name": "Canton Strategic Holdings",
+    "exchange": "NASDAQ",
+    "cc_holdings": 3677150850,
+    "avg_buy_price": 0.1473,
+    "debt": 0,
+    "cash": 41532140,
+    "shares_outstanding": 56656271,
+    "super_validator": true,
+    "dat_inception": "2026-02-18",
+    "dat_inception_note": "Tharimmune → Canton Strategic 사명변경 + NASDAQ:CNTN 거래 시작 (DAT 전환)",
+    "source": "10-Q FY2026 Q1 (2026-03-31): 3,677,150,850 CC (FV $541.6M); cash $41.5M; 56,656,271 shares. avg_buy_price = Q1-end FV/qty 역산($0.1473)",
+    "as_of": "2026-03-31"
+  }
+]

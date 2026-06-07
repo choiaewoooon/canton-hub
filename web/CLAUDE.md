@@ -66,6 +66,7 @@ web/
 - **API 호출은 반드시 `lib/api.ts`의 SWR 훅 경유** — `fetch` 직접 호출 금지. `NEXT_PUBLIC_API_URL` 환경변수로 백엔드 베이스 URL 결정
 - 파일·라인 참조 시 markdown 링크 사용: `[filename.tsx:42](file.tsx#L42)`
 - 이모지는 유저가 명시 요청하지 않는 한 사용 금지 (단, Canton 브랜드 상징 🇰🇷 🏢 🔥 등 데이터성 이모지는 OK)
+- **다국어(i18n)는 신기능의 필수 요건 — 나중이 아니라 처음부터.** 이 앱은 ko/en/ja/zh 4개 언어 대상이다. 새 페이지·컴포넌트·섹션을 만들 때 **사용자에게 보이는 모든 문자열을 한국어로 하드코딩하지 말 것.** `lib/use-lang.ts`의 `useLang()`로 현재 언어를 받고, 컴포넌트 내 `lang === "ko" ? ... : ...` 분기 또는 `messages/{ko,en,ja,zh}.json`을 쓴다(기존 `app/feed`·`components/feed-page/*` 패턴 참조). 라벨이 영어 고정이어도 되는 건 티커·단위(USD, CC, mNAV, x) 같은 보편 기호뿐. **체크리스트: 신규 UI 작업 완료 전 "4개 언어 전부에서 말이 되는가?"를 자문할 것.**
 
 ## 1. Quick Reference
 

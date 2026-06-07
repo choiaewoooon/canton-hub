@@ -131,6 +131,7 @@ api/main.py
 | GET | `/api/analytics/holders` | — | `holders` | `{total, top: [{address, balance, pct}, ...]}` |
 | GET | `/api/analytics/kr-companies` | — | `kr_companies` | `{companies: [{name, holdings, source}, ...]}` |
 | GET | `/api/analytics/funding-rates` | — | `analytics:funding-rates` (+ `analytics:exchanges` join) | `{rates: [{source, venue_type, market, pair, fr_raw, period_hours, fr_apr, next_funding_ts, api_source, spread_pct}, ...], updated_at}` — `spread_pct`는 `analytics:exchanges`의 거래소 bid-ask 스프레드를 `_DEPTH_SOURCE_MAP`으로 join(없으면 null). 프론트 net APR 계산용. 캐시 미스 시 `{rates: [], updated_at: null}` |
+| GET | `/api/analytics/dat` | — | `analytics:dat` | `{companies: [{ticker, name, cc_holdings, stock_price, market_cap, mnav, premium_loss, risk, ...}, ...], company_count}` — DAT 트래커 (CNTN 등 $CC 보유 상장사 mNAV/PL/리스크), 캐시 미스 시 `{companies: [], company_count: 0}` |
 | GET | `/api/health` | — | — | `{status: "ok"}` (Cloudflare Tunnel 헬스체크) |
 
 **WHEN** a route's cache key is missing/expired → return HTTP 503 with `{error: "cache_miss", key: "<key>"}`. Routes do **not** trigger on-demand collection.
@@ -227,6 +228,7 @@ api/main.py
 | `kr_companies` | 1800s | `collect_kr_companies` | 1800s | `/api/analytics/kr-companies` |
 | `media:items` | 7200s | `collect_media` | 3600s | `/api/feed` |
 | `analytics:funding-rates` | 90s | `collect_funding_rates` | 60s | `/api/analytics/funding-rates` |
+| `analytics:dat` | 600s | `collect_dat` | 300s | `/api/analytics/dat` — DAT 트래커 (CNTN 등 $CC 보유 상장사 mNAV/PL/리스크) |
 
 **Rule**: Producer interval MUST be ≤ TTL/2 to ensure no serving stale-miss gaps.
 
