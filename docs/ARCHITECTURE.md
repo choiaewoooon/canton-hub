@@ -130,7 +130,7 @@ api/main.py
 | GET | `/api/analytics/burn-breakdown` | — | `burn_breakdown` | `{categories: [{name, amount, pct}, ...]}` |
 | GET | `/api/analytics/holders` | — | `holders` | `{total, top: [{address, balance, pct}, ...]}` |
 | GET | `/api/analytics/kr-companies` | — | `kr_companies` | `{companies: [{name, holdings, source}, ...]}` |
-| GET | `/api/analytics/funding-rates` | — | `analytics:funding-rates` | `{rates: [{exchange, symbol, funding_rate, apr, settlement_interval_h, exchange_type, updated_at}, ...], updated_at}` — 캐시 미스 시 `{rates: [], updated_at: null}` |
+| GET | `/api/analytics/funding-rates` | — | `analytics:funding-rates` (+ `analytics:exchanges` join) | `{rates: [{source, venue_type, market, pair, fr_raw, period_hours, fr_apr, next_funding_ts, api_source, spread_pct}, ...], updated_at}` — `spread_pct`는 `analytics:exchanges`의 거래소 bid-ask 스프레드를 `_DEPTH_SOURCE_MAP`으로 join(없으면 null). 프론트 net APR 계산용. 캐시 미스 시 `{rates: [], updated_at: null}` |
 | GET | `/api/analytics/dat` | — | `analytics:dat` | `{companies: [{ticker, name, cc_holdings, stock_price, market_cap, mnav, premium_loss, risk, ...}, ...], company_count}` — DAT 트래커 (CNTN 등 $CC 보유 상장사 mNAV/PL/리스크), 캐시 미스 시 `{companies: [], company_count: 0}` |
 | GET | `/api/health` | — | — | `{status: "ok"}` (Cloudflare Tunnel 헬스체크) |
 
@@ -241,3 +241,4 @@ api/main.py
 | 2026-04-15 | Initial creation | Generated via `docs-init` skill |
 | 2026-05-30 | 피드 v2 반영: `tweet:items` 캐시 키 추가, `feed:{lang}` ai_summary 전용으로 변경, `/api/feed` 페이지네이션·트윗분류 문서화, `data/tweet_items.json` 링버퍼 기록 | feat/feed-v2-categorize-paginate |
 | 2026-05-31 | 펀딩비 매트릭스 반영: `analytics:funding-rates` 캐시 키, `GET /api/analytics/funding-rates`, `collectors/funding_rates.py` 모듈 추가 | feat/funding-rates |
+| 2026-06-03 | net APR: funding-rates 응답에 `spread_pct` join(체결 스프레드 차감 net APR·손익분기일·net 최대 페어 선택) | feat/funding-net-apr |

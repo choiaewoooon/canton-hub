@@ -162,6 +162,7 @@ export interface FundingRate {
   fr_apr: number;
   next_funding_ts: number;
   api_source: string;
+  spread_pct?: number | null;  // 거래소 bid-ask 스프레드 % (백엔드 join, 없으면 null)
 }
 
 export interface FundingRates {
