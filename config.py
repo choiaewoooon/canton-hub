@@ -32,6 +32,10 @@ STOOQ_QUOTE_URL = "https://stooq.com/q/l/"  # ?s=<ticker>.us&f=sd2t2ohlcv&h&e=cs
 STOOQ_HISTORY_URL = "https://stooq.com/q/d/l/"  # ?s=<ticker>.us&i=d&apikey=... (일봉 히스토리, apikey 필요)
 STOOQ_APIKEY = os.getenv("STOOQ_APIKEY", "")  # 무료 발급: https://stooq.com/q/d/?s=cntn.us&get_apikey
 YAHOO_FINANCE_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart"
+# Finnhub 실시간 quote (DAT 주가 1순위). 무료 키 60req/분, 단일 티커 폴링엔 충분.
+# Yahoo/stooq 키리스 소스가 백엔드 IP를 429하는 문제로 정식 키 소스로 전환(ADR-0004).
+FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"  # ?symbol=<TICKER>&token=<KEY>
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")  # 무료 발급: https://finnhub.io/register
 EXCHANGERATE_API_URL = "https://open.er-api.com/v6/latest/USD"
 
 # ============================================================

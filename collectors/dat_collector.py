@@ -92,6 +92,23 @@ def _load_companies() -> list[dict]:
         return []
 
 
+def _last_good_prices() -> dict[str, float]:
+    """직전 dat_cache.json에서 티커별 마지막 정상 주가를 읽어온다.
+
+    이번 사이클에 모든 라이브 소스가 throttle/실패해 stock_price가 None이면
+    이 값으로 폴백해 mNAV가 "—"로 깜빡이지 않게 한다. 부재/손상 시 빈 dict.
+    """
+    cached = load_cached_dat()
+    if not cached:
+        return {}
+    out: dict[str, float] = {}
+    for co in cached.get("companies", []):
+        sp = co.get("stock_price")
+        if isinstance(sp, (int, float)) and sp:
+            out[co.get("ticker", "")] = float(sp)
+    return out
+
+
 async def _fetch_stooq(client: httpx.AsyncClient, ticker: str) -> Optional[float]:
     """stooq CSV로 종가 조회 (1순위, 키 불필요). 실패/없음 시 None.
 
@@ -135,15 +152,42 @@ async def _fetch_yahoo(client: httpx.AsyncClient, ticker: str) -> Optional[float
         return None
 
 
+async def _fetch_finnhub(client: httpx.AsyncClient, ticker: str) -> Optional[float]:
+    """Finnhub /quote로 현재가 조회 (1순위, 무료 키 필요). 실패/무키 시 None.
+
+    응답: {"c": 현재가, "h":.., "l":.., "o":.., "pc":.., "t":..}. 장중·정규장 종가.
+    키리스 Yahoo/stooq의 IP-429 문제를 피하기 위한 정식 소스(ADR-0004).
+    """
+    if not config.FINNHUB_API_KEY:
+        return None
+    try:
+        r = await client.get(
+            config.FINNHUB_QUOTE_URL,
+            params={"symbol": ticker.upper(), "token": config.FINNHUB_API_KEY},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            logger.warning(f"Finnhub {ticker} status {r.status_code}")
+            return None
+        c = r.json().get("c")
+        # 미상장/오류 시 0.0을 줌 → None 취급해 폴백.
+        return float(c) if c else None
+    except Exception as e:
+        logger.warning(f"Finnhub fetch failed for {ticker}: {e}")
+        return None
+
+
 async def _fetch_stock(client: httpx.AsyncClient, ticker: str) -> tuple[Optional[float], Optional[float]]:
-    """주가 (현재가, 시총) 조회. stooq 1순위 → Yahoo 2순위 폴백.
+    """주가 (현재가, 시총) 조회. Finnhub 1순위 → Yahoo 2순위 → stooq 3순위 폴백.
 
     시총은 어느 소스에도 안정적으로 없어 항상 None을 반환하고,
     호출부에서 `현재가 × shares_outstanding`로 산출한다.
     """
-    price = await _fetch_stooq(client, ticker)
+    price = await _fetch_finnhub(client, ticker)
     if price is None:
         price = await _fetch_yahoo(client, ticker)
+    if price is None:
+        price = await _fetch_stooq(client, ticker)
     return price, None
 
 
@@ -253,6 +297,7 @@ async def collect_dat(cc_price: Optional[float]) -> dict:
     각 기업: 정적값(JSON) + 라이브(주가/시총/환율) + 계산(nav/mnav/pl/risk).
     """
     companies = _load_companies()
+    last_good = _last_good_prices()  # 직전 사이클의 티커별 정상 주가 (폴백용)
     out_companies: list[dict] = []
 
     async with httpx.AsyncClient(headers=_HTTP_HEADERS) as client:
@@ -272,6 +317,10 @@ async def collect_dat(cc_price: Optional[float]) -> dict:
             # 히스토리의 마지막 종가로 폴백 → mNAV가 끊기지 않게.
             if stock_price is None and price_history:
                 stock_price = price_history[-1].get("close")
+            # 라이브·히스토리 모두 실패해도 직전 캐시의 정상 주가를 유지
+            # (한 사이클 throttle에 mNAV/리스크가 "—"로 깜빡이지 않게).
+            if stock_price is None:
+                stock_price = last_good.get(ticker)
 
             # 시총이 응답에 없으면 주가 × 발행주식수로 폴백
             shares = co.get("shares_outstanding") or 0
