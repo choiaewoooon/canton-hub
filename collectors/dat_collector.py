@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 _COMPANIES_FILE = Path(__file__).parent.parent / "data" / "dat_companies.json"
 _CACHE_FILE = Path(__file__).parent.parent / "data" / "dat_cache.json"
+_CC_HIST_FILE = Path(__file__).parent.parent / "data" / "dat_cc_hist.json"
 
 # mNAV bands. 1.0x is the only structurally-meaningful line (premium↔discount,
 # below which equity raises turn dilutive → death-spiral zone). 1.2x is a tunable
@@ -357,11 +358,21 @@ async def _fetch_price_history(client: httpx.AsyncClient, ticker: str) -> list[d
     return hist
 
 
+def _load_cc_hist_cache() -> dict[str, float]:
+    """직전 성공한 $CC 일별 종가 파일 캐시. 부재/손상 시 {}."""
+    if not _CC_HIST_FILE.exists():
+        return {}
+    try:
+        return json.loads(_CC_HIST_FILE.read_text())
+    except Exception:
+        return {}
+
+
 async def _fetch_cc_history(client: httpx.AsyncClient) -> dict[str, float]:
     """$CC 6개월 일별 종가 (CoinGecko market_chart, 키 불필요).
 
-    반환: {"YYYY-MM-DD": close, ...}. 실패 시 {}.
-    주가 히스토리와 날짜로 병합하기 위해 dict로 반환.
+    반환: {"YYYY-MM-DD": close, ...}. CoinGecko가 throttle(429)되면 직전 성공분을
+    파일 캐시(_CC_HIST_FILE)에서 복구해 차트의 $CC 라인이 끊기지 않게 한다.
     """
     try:
         url = f"{config.COINGECKO_API_URL}/coins/{config.COINGECKO_COIN_ID}/market_chart"
@@ -370,16 +381,23 @@ async def _fetch_cc_history(client: httpx.AsyncClient) -> dict[str, float]:
             params["x_cg_demo_api_key"] = config.COINGECKO_API_KEY
         r = await client.get(url, params=params, timeout=12)
         if r.status_code != 200:
-            logger.warning(f"CoinGecko $CC history status {r.status_code}")
-            return {}
+            logger.warning(f"CoinGecko $CC history status {r.status_code} — 파일 캐시 폴백")
+            return _load_cc_hist_cache()
         out: dict[str, float] = {}
         for ms, price in r.json().get("prices", []):
             day = datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
             out[day] = round(float(price), 6)  # 같은 날 여러 포인트면 마지막이 종가
-        return out
+        if out:
+            try:
+                _CC_HIST_FILE.parent.mkdir(exist_ok=True)
+                _CC_HIST_FILE.write_text(json.dumps(out))
+            except Exception as e:
+                logger.warning(f"$CC hist cache save failed: {e}")
+            return out
+        return _load_cc_hist_cache()
     except Exception as e:
-        logger.warning(f"CoinGecko $CC history fetch failed: {e}")
-        return {}
+        logger.warning(f"CoinGecko $CC history fetch failed: {e} — 파일 캐시 폴백")
+        return _load_cc_hist_cache()
 
 
 async def _fetch_krw_rate(client: httpx.AsyncClient) -> Optional[float]:
