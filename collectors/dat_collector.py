@@ -7,6 +7,7 @@ data/dat_companies.json에서 로드하고, 주가(Yahoo Finance)·USD/KRW(open.
 
 순수 모듈: cache를 모름. 예외는 내부에서 삼키고 빈/부분 데이터를 반환한다 (절대 throw 금지).
 """
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -137,19 +138,32 @@ async def _fetch_stooq(client: httpx.AsyncClient, ticker: str) -> Optional[float
 
 
 async def _fetch_yahoo(client: httpx.AsyncClient, ticker: str) -> Optional[float]:
-    """Yahoo Finance chart로 현재가 조회 (2순위 폴백). 실패 시 None."""
-    try:
-        url = f"{config.YAHOO_FINANCE_CHART_URL}/{ticker}"
-        r = await client.get(url, params={"interval": "1d", "range": "1d"}, timeout=10)
-        if r.status_code != 200:
-            logger.warning(f"Yahoo {ticker} status {r.status_code}")
+    """Yahoo Finance chart로 현재가 조회 (Finnhub 무키 시 사실상 1순위). 실패 시 None.
+
+    백엔드 IP가 버스트 사이클에서 429를 자주 맞아, 429에 한해 짧은 backoff로
+    최대 3회 재시도한다(단발 호출은 대개 200). 한 번이라도 성공하면 last-good에 저장돼
+    이후 throttle 사이클을 버틴다.
+    """
+    url = f"{config.YAHOO_FINANCE_CHART_URL}/{ticker}"
+    for attempt in range(3):
+        try:
+            r = await client.get(url, params={"interval": "1d", "range": "1d"}, timeout=10)
+            if r.status_code == 429:
+                if attempt < 2:
+                    await asyncio.sleep(1.5 * (attempt + 1))  # 1.5s, 3s backoff
+                    continue
+                logger.warning(f"Yahoo {ticker} status 429 (after retries)")
+                return None
+            if r.status_code != 200:
+                logger.warning(f"Yahoo {ticker} status {r.status_code}")
+                return None
+            meta = (r.json().get("chart", {}).get("result") or [{}])[0].get("meta", {})
+            price = meta.get("regularMarketPrice")
+            return float(price) if price is not None else None
+        except Exception as e:
+            logger.warning(f"Yahoo fetch failed for {ticker}: {e}")
             return None
-        meta = (r.json().get("chart", {}).get("result") or [{}])[0].get("meta", {})
-        price = meta.get("regularMarketPrice")
-        return float(price) if price is not None else None
-    except Exception as e:
-        logger.warning(f"Yahoo fetch failed for {ticker}: {e}")
-        return None
+    return None
 
 
 async def _fetch_finnhub(client: httpx.AsyncClient, ticker: str) -> Optional[float]:
@@ -177,13 +191,61 @@ async def _fetch_finnhub(client: httpx.AsyncClient, ticker: str) -> Optional[flo
         return None
 
 
-async def _fetch_stock(client: httpx.AsyncClient, ticker: str) -> tuple[Optional[float], Optional[float]]:
-    """주가 (현재가, 시총) 조회. Finnhub 1순위 → Yahoo 2순위 → stooq 3순위 폴백.
+_NASDAQ_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://www.nasdaq.com",
+    "Referer": "https://www.nasdaq.com/",
+}
 
+
+def _parse_money(s) -> Optional[float]:
+    """'$2.30' / '1,234.5' 같은 통화 문자열 → float. 무효 시 None."""
+    if s is None:
+        return None
+    try:
+        v = str(s).replace("$", "").replace(",", "").strip()
+        if v in ("", "N/A", "—"):
+            return None
+        return float(v)
+    except (ValueError, TypeError):
+        return None
+
+
+async def _fetch_nasdaq(client: httpx.AsyncClient, ticker: str) -> Optional[float]:
+    """Nasdaq 공개 quote API로 현재가 조회 (키리스, Yahoo와 다른 인프라).
+
+    응답: {"data": {"primaryData": {"lastSalePrice": "$2.30", ...}}, "status": {"rCode": 200}}.
+    Yahoo가 백엔드 IP를 429할 때도 이 소스는 동작하는 경우가 많다. 실패 시 None.
+    """
+    try:
+        r = await client.get(
+            f"{config.NASDAQ_QUOTE_URL}/{ticker.upper()}/info",
+            params={"assetclass": "stocks"},
+            headers=_NASDAQ_HEADERS,
+            timeout=10,
+        )
+        if r.status_code != 200:
+            logger.warning(f"Nasdaq {ticker} status {r.status_code}")
+            return None
+        data = (r.json() or {}).get("data") or {}
+        return _parse_money((data.get("primaryData") or {}).get("lastSalePrice"))
+    except Exception as e:
+        logger.warning(f"Nasdaq fetch failed for {ticker}: {e}")
+        return None
+
+
+async def _fetch_stock(client: httpx.AsyncClient, ticker: str) -> tuple[Optional[float], Optional[float]]:
+    """주가 (현재가, 시총) 조회. Finnhub → Nasdaq → Yahoo → stooq 순 폴백.
+
+    Finnhub(키 있을 때 최우선) → Nasdaq(키리스, Yahoo IP-throttle에도 강함) →
+    Yahoo(키리스, 429 잦음) → stooq(현재 사실상 죽음).
     시총은 어느 소스에도 안정적으로 없어 항상 None을 반환하고,
     호출부에서 `현재가 × shares_outstanding`로 산출한다.
     """
     price = await _fetch_finnhub(client, ticker)
+    if price is None:
+        price = await _fetch_nasdaq(client, ticker)
     if price is None:
         price = await _fetch_yahoo(client, ticker)
     if price is None:

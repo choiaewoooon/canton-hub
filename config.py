@@ -36,6 +36,9 @@ YAHOO_FINANCE_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart"
 # Yahoo/stooq 키리스 소스가 백엔드 IP를 429하는 문제로 정식 키 소스로 전환(ADR-0004).
 FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"  # ?symbol=<TICKER>&token=<KEY>
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")  # 무료 발급: https://finnhub.io/register
+# Nasdaq 공개 quote (키리스, Yahoo와 다른 인프라 → Yahoo IP-throttle 시에도 동작).
+# 호출: {URL}/<TICKER>/info?assetclass=stocks  (Referer/Origin nasdaq.com 헤더 필요)
+NASDAQ_QUOTE_URL = "https://api.nasdaq.com/api/quote"
 EXCHANGERATE_API_URL = "https://open.er-api.com/v6/latest/USD"
 
 # ============================================================
