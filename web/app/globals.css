@@ -397,6 +397,8 @@ select.ch-btn-nav { padding: 5px 8px; outline: none; font-family: inherit; }
 .ch-dat-chart-row .ch-card-title { margin-bottom: 10px; }
 .ch-chart-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .ch-chart-head-row .ch-card-title { margin-bottom: 0; }
+.ch-chart-head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ch-chart-head-right .ch-seg button { padding: 2px 7px; font-size: 10px; }
 .ch-chart-legend { display: flex; gap: 12px; }
 .ch-chart-legend .lg { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: var(--zinc-500); }
 .ch-chart-legend .ln { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }

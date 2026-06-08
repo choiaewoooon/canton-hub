@@ -1,17 +1,28 @@
 "use client";
 
-import type { DatCompany } from "@/lib/types";
+import { useState } from "react";
+import type { DatCompany, DatPricePoint } from "@/lib/types";
 import { fmtUsd, fmtCc, fmtPct, fmtLargeUsd } from "@/lib/format";
 import MnavChart from "./mnav-chart";
 import PriceChart from "./price-chart";
 
 const T: Record<string, Record<string, string>> = {
-    stockChart: { ko: "주가 vs $CC (6개월)", en: "Stock vs $CC (6M)", ja: "株価 vs $CC (6ヶ月)", zh: "股价 vs $CC (6个月)" },
+    stockChart: { ko: "주가 vs $CC", en: "Stock vs $CC", ja: "株価 vs $CC", zh: "股价 vs $CC" },
     mnavChart: { ko: "mNAV 추이", en: "mNAV History", ja: "mNAV推移", zh: "mNAV走势" },
     legendStock: { ko: "주가", en: "Stock", ja: "株価", zh: "股价" },
     pl: { ko: "실시간 평가손익", en: "Real-time P/L", ja: "リアルタイム損益", zh: "实时盈亏" },
 };
 const tr = (k: string, lang: string) => T[k]?.[lang] ?? T[k]?.en ?? k;
+
+// 일봉 6개월 데이터를 기간별로 슬라이스 (백엔드 호출 없이 클라이언트에서). 6M = 전체.
+const RANGES = [1, 3, 6] as const; // months
+function sliceByMonths(data: DatPricePoint[] | undefined, months: number): DatPricePoint[] {
+    if (!data?.length || months >= 6) return data ?? [];
+    const last = new Date(`${data[data.length - 1].ts}T00:00:00Z`);
+    last.setUTCMonth(last.getUTCMonth() - months);
+    const cutoff = last.toISOString().slice(0, 10);
+    return data.filter((p) => p.ts >= cutoff);
+}
 
 const RISK_META: Record<
     string,
@@ -44,6 +55,8 @@ function MnavGauge({ mnav, color }: { mnav: number | null; color: string }) {
 }
 
 export default function CompanyCard({ c, lang = "en" }: { c: DatCompany; lang?: string }) {
+    const [rangeM, setRangeM] = useState<number>(6); // 차트 기간(개월), 기본 6M
+    const pricedSliced = sliceByMonths(c.price_history, rangeM);
     const plPositive = (c.pl_usd ?? 0) >= 0;
     const plColor = plPositive ? "var(--canton-up)" : "var(--canton-down)";
     const plArrow = plPositive ? "▲" : "▼";
@@ -134,13 +147,28 @@ export default function CompanyCard({ c, lang = "en" }: { c: DatCompany; lang?: 
                 <div className="ch-dat-chart-row">
                     <div className="ch-chart-head-row">
                         <div className="ch-card-title">{tr("stockChart", lang)}</div>
-                        <div className="ch-chart-legend">
-                            <span className="lg"><i className="ln" style={{ background: plColor }} />{tr("legendStock", lang)}</span>
-                            <span className="lg"><i className="ln dash" style={{ background: "var(--canton-lime)" }} />$CC</span>
+                        <div className="ch-chart-head-right">
+                            <div className="ch-chart-legend">
+                                <span className="lg"><i className="ln" style={{ background: plColor }} />{tr("legendStock", lang)}</span>
+                                <span className="lg"><i className="ln dash" style={{ background: "var(--canton-lime)" }} />$CC</span>
+                            </div>
+                            <div className="ch-seg" role="tablist" aria-label="chart range">
+                                {RANGES.map((m) => (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        className={rangeM === m ? "active" : ""}
+                                        aria-pressed={rangeM === m}
+                                        onClick={() => setRangeM(m)}
+                                    >
+                                        {m}M
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                     <PriceChart
-                        data={c.price_history}
+                        data={pricedSliced}
                         lang={lang}
                         inception={c.dat_inception}
                         inceptionTip={inceptionTip}

@@ -52,10 +52,12 @@ export default function PriceChart({
     const stockColor = stockColorProp ?? (up ? "var(--canton-up)" : "var(--canton-down)");
     const series = data.map((p) => ({ t: p.ts, close: p.close, cc: p.cc }));
 
-    // DAT 전환일에 해당하는 실제 데이터 포인트(처음으로 inception 이상인 날짜)
-    const incTs = inception
-        ? data.find((p) => p.ts >= inception)?.ts ?? null
-        : null;
+    // DAT 전환일 마커: 전환일이 보이는 구간 안일 때만 표시.
+    // (1M/3M로 줄이면 전환일이 구간 시작보다 과거 → 마커를 시작점에 잘못 찍지 않게 숨김)
+    const incTs =
+        inception && inception >= data[0].ts
+            ? data.find((p) => p.ts >= inception)?.ts ?? null
+            : null;
 
     return (
         <div className="ch-chart" style={{ height: 200 }}>
