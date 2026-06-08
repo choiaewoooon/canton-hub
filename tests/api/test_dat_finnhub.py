@@ -9,9 +9,26 @@ from collectors.dat_collector import (
     _fetch_finnhub,
     _fetch_nasdaq,
     _fetch_yahoo,
+    _history_nasdaq,
     _last_good_prices,
     _parse_money,
 )
+
+
+def test_nasdaq_history_parses_and_sorts():
+    """MM/DD/YYYY·'$x' 파싱 + 오름차순 정렬 + 무효행 스킵."""
+    body = {"status": {"rCode": 200}, "data": {"tradesTable": {"rows": [
+        {"date": "06/05/2026", "close": "$2.30"},
+        {"date": "06/04/2026", "close": "$2.45"},
+        {"date": "06/03/2026", "close": "N/A"},   # 무효 → 스킵
+    ]}}}
+
+    async def run():
+        async with _client_returning(body) as c:
+            return await _history_nasdaq(c, "CNTN")
+
+    out = asyncio.run(run())
+    assert out == [{"ts": "2026-06-04", "close": 2.45}, {"ts": "2026-06-05", "close": 2.3}]
 
 
 def test_parse_money_formats():

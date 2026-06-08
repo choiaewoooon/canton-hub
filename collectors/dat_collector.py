@@ -10,7 +10,7 @@ data/dat_companies.json에서 로드하고, 주가(Yahoo Finance)·USD/KRW(open.
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -306,12 +306,52 @@ async def _history_yahoo(client: httpx.AsyncClient, ticker: str) -> list[dict]:
         return []
 
 
-async def _fetch_price_history(client: httpx.AsyncClient, ticker: str) -> list[dict]:
-    """6개월 일봉 종가 히스토리. stooq(apikey) 1순위 → Yahoo 2순위.
+async def _history_nasdaq(client: httpx.AsyncClient, ticker: str) -> list[dict]:
+    """Nasdaq 공개 historical API로 6개월 일봉 종가 (키리스, 1순위).
 
-    반환: [{"ts": "YYYY-MM-DD", "close": float}, ...] (오름차순). 둘 다 실패 시 [].
+    응답: data.tradesTable.rows = [{"date":"MM/DD/YYYY","close":"$2.30",...}, ...] (최신순).
+    Yahoo가 IP-throttle된 상태에서도 동작. 실패 시 [].
     """
-    hist = await _history_stooq(client, ticker)
+    try:
+        today = datetime.now(timezone.utc).date()
+        frm = today - timedelta(days=185)
+        r = await client.get(
+            f"{config.NASDAQ_QUOTE_URL}/{ticker.upper()}/historical",
+            params={"assetclass": "stocks", "fromdate": frm.isoformat(),
+                    "todate": today.isoformat(), "limit": 9999},
+            headers=_NASDAQ_HEADERS,
+            timeout=12,
+        )
+        if r.status_code != 200:
+            logger.warning(f"Nasdaq history {ticker} status {r.status_code}")
+            return []
+        rows = (((r.json() or {}).get("data") or {}).get("tradesTable") or {}).get("rows") or []
+        out: list[dict] = []
+        for row in rows:
+            close = _parse_money(row.get("close"))
+            ds = row.get("date")
+            if close is None or not ds:
+                continue
+            try:
+                ts = datetime.strptime(ds, "%m/%d/%Y").strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                continue
+            out.append({"ts": ts, "close": round(close, 4)})
+        out.sort(key=lambda p: p["ts"])  # 오름차순(과거→현재)
+        return out
+    except Exception as e:
+        logger.warning(f"Nasdaq history fetch failed for {ticker}: {e}")
+        return []
+
+
+async def _fetch_price_history(client: httpx.AsyncClient, ticker: str) -> list[dict]:
+    """6개월 일봉 종가 히스토리. Nasdaq(키리스) 1순위 → stooq(apikey) → Yahoo.
+
+    반환: [{"ts": "YYYY-MM-DD", "close": float}, ...] (오름차순). 모두 실패 시 [].
+    """
+    hist = await _history_nasdaq(client, ticker)
+    if not hist:
+        hist = await _history_stooq(client, ticker)
     if not hist:
         hist = await _history_yahoo(client, ticker)
     return hist
