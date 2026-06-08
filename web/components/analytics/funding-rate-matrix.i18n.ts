@@ -27,6 +27,8 @@ export const TEXTS = {
   daysUnit:          { ko: "일",                            en: "d" },
   netNa:             { ko: "스프레드 없음",                 en: "No spread data" },
   holdNote:          { ko: "기본 7일 보유 가정",            en: "Assumes 7-day hold" },
+  warnLoss:          { ko: "⚠ 지금 진입 비추 — 왕복비용이 수익을 초과 (net 손실)",
+                       en: "⚠ Skip for now — round-trip costs exceed yield (net loss)" },
 } as const;
 
 export type TextKey = keyof typeof TEXTS;

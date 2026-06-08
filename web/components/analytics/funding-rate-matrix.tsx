@@ -270,6 +270,11 @@ function RecommendationCards({
               ? `${t("colApr")} ${perpPair.apr.toFixed(1)}% · ${t("holdNote")}`
               : t("netNa")}
           </div>
+          {(perpPair.net_apr ?? perpPair.apr) < 0 && (
+            <div className="mb-3 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 text-[11px] text-amber-400 font-medium leading-snug">
+              {t("warnLoss")}
+            </div>
+          )}
           <div className="space-y-1.5 text-[13px]">
             <div className="flex justify-between">
               <span className="text-zinc-500">{t("shortLabel")}</span>
@@ -313,6 +318,11 @@ function RecommendationCards({
             {arrow(spotPerpPair.apr)} {Math.abs(spotPerpPair.apr).toFixed(1)}%
             <span className="text-[12px] font-medium text-zinc-500 ml-1.5">APR</span>
           </div>
+          {spotPerpPair.apr < 0 && (
+            <div className="mb-3 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 text-[11px] text-amber-400 font-medium leading-snug">
+              {t("warnLoss")}
+            </div>
+          )}
           <div className="space-y-1.5 text-[13px]">
             <div className="flex justify-between">
               <span className="text-zinc-500">{t("spotBuyLabel")}</span>
