@@ -22,7 +22,7 @@ Canton Network 실시간 대시보드의 FastAPI 백엔드. CoinGecko / CantonSc
 | 동적 스크래핑 | Playwright + Chromium | 1.40+ |
 | SSE 스트리밍 | sse-starlette | 2.0+ |
 | 설정 | python-dotenv | 1.0+ |
-| LLM | Anthropic Sonnet 4.6 | `tweet_summarizer.py` — KST 00시/12시 2회만 호출 (비용 게이팅) |
+| LLM | 헤드리스 `claude -p` (Max 구독) | 요약(news/tweet)·번역 모두 `claude_cli.py` 경유. 토큰 과금 없음 — API 키 불필요 |
 | 배포 | Mac launchd + Cloudflare Quick Tunnel | `com.cobling.canton-hub-backend` + `com.cobling.canton-hub-tunnel` |
 | 터널 | cloudflared | `scripts/run-tunnel.sh` + 자동 Vercel env 업데이트 |
 
@@ -210,3 +210,5 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 | 2026-04-20 | 배포 구조를 Fly.io → Mac local + Cloudflare Quick Tunnel로 전환 반영 | Fly 트라이얼 만료, `canton-api` 앱 destroy. 새 구조는 이미 launchd로 운영 중 |
 | 2026-04-20 | `tweet_summarizer` 호출을 KST 00/12시 2회로 게이팅 | Sonnet 4.6 비용이 월 $26 수준까지 오름. 97% 절감 (~$0.6/월)으로 낮춤 |
 | 2026-04-20 | Twitter collector 호스트 교체 (`twitter-api45` → `twitter241`) | BASIC 플랜 쿼터 소진. 실제 구독은 Twttr API(`twitter241.p.rapidapi.com`)였음 |
+| 2026-06-21 | news/tweet 요약을 Anthropic API(httpx 직접 POST) → 헤드리스 `claude -p`(`claude_cli.py`)로 전환 | Mac launchd가 Max 구독으로 도므로 토큰 과금 제거. 옛 SDK 코드를 물고 돌던 stale 프로세스가 월 $4.63 누수 중이었음 → 키 제거 + 재시작 |
+| 2026-06-21 | 다국어 번역 DeepL Free → 헤드리스 `claude -p` 전환 | DeepL 무료 쿼터 소진(456)으로 ko↔en/ja/zh 번역 전면 실패. `ANTHROPIC_API_KEY`/`DEEPL_API_KEY` 모두 불필요해져 `.env`에서 제거 |

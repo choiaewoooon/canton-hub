@@ -76,10 +76,10 @@ Vercel $0, tunnel $0, Mac always-on (~$1/mo power).
    - Python 3.12+ (`brew install python@3.12`)
    - `brew install cloudflared`
 3. **Secrets** (local `.env` in `canton-hub/`)
-   - `ANTHROPIC_API_KEY` — for AI tweet summaries
    - `COINGECKO_API_KEY` — free Demo key
    - `RAPIDAPI_KEY` — Twitter API (Twttr API via `twitter241.p.rapidapi.com`)
    - `GITHUB_TOKEN` — read-only public_repo scope
+   - (AI 요약·번역은 헤드리스 `claude -p`(Max 구독)라 `ANTHROPIC_API_KEY`/`DEEPL_API_KEY` 불필요 — 대신 Mac에 claude CLI 로그인 필요)
 4. **Local `.env`** — `cp .env.example .env` and fill. Gitignored.
 
 ---
@@ -251,18 +251,19 @@ launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend
 
 |                     | Mac `.env` | Vercel |
 |---------------------|:----------:|:------:|
-| ANTHROPIC_API_KEY   | ✅ | |
 | COINGECKO_API_KEY   | ✅ | |
 | RAPIDAPI_KEY        | ✅ | |
 | GITHUB_TOKEN        | ✅ | |
 | NEXT_PUBLIC_API_URL |    | ✅ (auto-managed by update-vercel-env.sh) |
+
+> AI 요약·번역은 헤드리스 `claude -p`(Max 구독)로 동작 — `ANTHROPIC_API_KEY`/`DEEPL_API_KEY` 불필요(Mac에 claude CLI 로그인 필요).
 
 ## Cost estimate (monthly)
 
 - Vercel: **$0** (Hobby tier)
 - Cloudflare Quick Tunnel: **$0**
 - Mac electricity: ~$1
-- Anthropic Sonnet 4.6 (2 calls/day): **~$0.6**
+- AI 요약·번역: **$0** (헤드리스 `claude -p` — Max 구독에 포함, 토큰 과금 없음)
 - RapidAPI Twttr API (BASIC → PRO if needed): **$1–25**
 - CoinGecko Demo: **$0**
 

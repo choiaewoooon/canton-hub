@@ -80,12 +80,13 @@ cd web && vercel --prod --yes
 |---|---|---|
 | `COINGECKO_API_KEY` | CoinGecko Demo API Key (429 방지) | 권장 |
 | `RAPIDAPI_KEY` | Twttr API 키 (`twitter241.p.rapidapi.com`, `/api/feed`) | O |
-| `ANTHROPIC_API_KEY` | Claude Sonnet 4.6 (`/api/feed` AI 요약) | O |
 | `GITHUB_TOKEN` | GitHub PAT, `public_repo` 읽기 (`/api/governance`) | O |
 | `ALLOWED_ORIGINS` | 프로덕션 CORS 허용 도메인 (쉼표 구분) | 프로덕션만 |
 | `TIMEZONE` | 로그 타임스탬프 TZ | 선택 (기본 `Asia/Seoul`) |
 
 > 프로덕션에서는 반드시 `ALLOWED_ORIGINS`를 실제 Vercel URL로 좁힐 것. 비워두면 `*` 폴백.
+>
+> AI 요약(news/tweet)·다국어 번역은 헤드리스 `claude -p`(Mac Max 구독)로 동작하므로 `ANTHROPIC_API_KEY`/`DEEPL_API_KEY`는 불필요하다(대신 그 Mac에 claude CLI 로그인 필요).
 
 ## Project Structure
 
