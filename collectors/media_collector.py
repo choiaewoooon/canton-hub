@@ -113,7 +113,7 @@ def dedup_new(existing: list[dict], fetched: list[dict]) -> list[dict]:
 
     guid 중복뿐 아니라, Google News가 같은 기사를 여러 매체로 syndication 해서
     guid는 다르지만 제목이 같거나 거의 같은 경우까지 걸러낸다. 동일 기사를 매체
-    수만큼 Haiku 요약+DeepL 번역하던 비용 낭비를 막는 게 목적.
+    수만큼 Haiku 요약+번역하던 비용 낭비를 막는 게 목적.
 
     필터 단계 (보수적: 놓치는 건 약간의 비용, 잘못 합치면 뉴스 누락이라 정밀도 우선):
       1) guid 완전일치 → 기존 처리분

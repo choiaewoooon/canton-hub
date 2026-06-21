@@ -62,7 +62,7 @@ _BULLET_CHARS = "·・•"
 def _normalize_bullets(text: str, lang: str) -> str:
     """프론트 `split("·")`에 맞춰 요약 텍스트를 정규화.
 
-    - 줄 시작 불릿은 무조건 ASCII `·`로 통일 (DeepL이 ja에서 `・`로 바꾸는 이슈 상쇄)
+    - 줄 시작 불릿은 무조건 ASCII `·`로 통일 (번역기가 ja에서 `・`로 바꾸는 이슈 상쇄)
     - ko는 줄 안쪽 `·`를 `, `로 치환 (LLM이 중점을 구분자로 쓴 자리 — 본문 과쪼개짐 방지)
     - ja/zh/en의 줄 안쪽 `・`/`·`는 보존 (고유명사 구분 역할 유지)
     """
@@ -680,7 +680,7 @@ async def collect_feed(cache: TTLCache):
             for lang, result in zip(missing, results):
                 raw = result if isinstance(result, str) and result else summaries["ko"]
                 summaries[lang] = _normalize_bullets(raw, lang)
-            logger.info(f"Feed summary translated via DeepL: {missing}")
+            logger.info(f"Feed summary translated via claude -p: {missing}")
             _save_feed_summary(summaries, cached_ts)
         elif needs_ko_refresh:
             _save_feed_summary(summaries, cached_ts)
@@ -723,7 +723,7 @@ async def collect_feed(cache: TTLCache):
 
 
 async def collect_media(cache: TTLCache):
-    """Canton 미디어 RSS 수집. 신규 아이템만 Haiku 요약+분류 + DeepL 번역.
+    """Canton 미디어 RSS 수집. 신규 아이템만 Haiku 요약+분류 + claude -p 번역.
 
     비용: 폴링은 무료, 신규 기사만 LLM 처리(하루 ~수 건). 전부 기존이면 LLM 0회.
     """

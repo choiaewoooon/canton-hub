@@ -53,10 +53,11 @@ CANTONSCAN_BASE_URL = "https://www.cantonscan.com"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 # ============================================================
-# DeepL Free API — ko→en/ja/zh feed summary translation
+# 다국어 번역 — 헤드리스 claude -p (ko↔en/ja/zh feed·media)
+# DeepL Free는 무료 쿼터 소진(456)으로 2026-06-21 폐기. 구독으로 도는 claude -p라
+# 토큰 과금 없음. 번역은 단순 작업이라 빠른 Haiku로.
 # ============================================================
-DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
-DEEPL_API_URL = "https://api-free.deepl.com/v2/translate"
+ANTHROPIC_TRANSLATE_MODEL = "claude-haiku-4-5-20251001"
 
 # ============================================================
 # Misc collector settings
