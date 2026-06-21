@@ -83,5 +83,9 @@ MEDIA_FEEDS = [
 MEDIA_MAX = 60
 # 회당(폴링 1회) 처리할 신규 아이템 최대 수 — 콜드스타트 폭주 방지
 MEDIA_MAX_NEW_PER_RUN = 12
+# 같은 기사 syndication 판정용 제목 토큰 자카드 임계값. 높을수록 보수적(거의
+# 동일한 제목만 합침). 낮추면 같은 사건의 다른 헤드라인까지 더 공격적으로 합쳐
+# LLM 비용은 더 줄지만 서로 다른 기사를 합칠 위험이 커진다. 0.8 = 안전 기본값.
+MEDIA_DUP_SIM_THRESHOLD = 0.8
 # 뉴스 한줄 요약+분류용 모델 (트윗 요약은 Sonnet, 뉴스는 저렴한 Haiku)
 ANTHROPIC_NEWS_MODEL = "claude-haiku-4-5-20251001"

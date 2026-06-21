@@ -31,31 +31,28 @@ def test_category_keys_cover_taxonomy():
         assert k in CATEGORY_KEYS
 
 
-class _FakeResp:
-    def __init__(self, payload): self._p = payload
-    def raise_for_status(self): pass
-    def json(self): return self._p
-
-
-class _FakeClient:
-    def __init__(self, payload): self._p = payload
-    async def post(self, *a, **k): return _FakeResp(self._p)
-
-
 @pytest.mark.asyncio
-async def test_summarize_and_classify_parses_anthropic_response():
-    payload = {"content": [{"type": "text",
-               "text": '{"summary": "21Shares가 ETF를 출시함", "category": "etf_product"}'}]}
-    out = await summarize_and_classify("21Shares launches TCAN", "...", client=_FakeClient(payload))
+async def test_summarize_and_classify_parses_cli_response():
+    async def fake_runner(prompt):
+        return '{"summary": "21Shares가 ETF를 출시함", "category": "etf_product"}'
+    out = await summarize_and_classify("21Shares launches TCAN", "...", runner=fake_runner)
     assert out["category"] == "etf_product"
     assert "ETF" in out["summary_ko"]
 
 
 @pytest.mark.asyncio
 async def test_summarize_and_classify_falls_back_on_error():
-    class _BoomClient:
-        async def post(self, *a, **k): raise RuntimeError("boom")
-    out = await summarize_and_classify("t", "d", client=_BoomClient())
+    async def boom(prompt):
+        raise RuntimeError("boom")
+    out = await summarize_and_classify("t", "d", runner=boom)
+    assert out == {"summary_ko": "", "category": "other"}
+
+
+@pytest.mark.asyncio
+async def test_summarize_and_classify_falls_back_on_empty():
+    async def empty(prompt):
+        return None
+    out = await summarize_and_classify("t", "d", runner=empty)
     assert out == {"summary_ko": "", "category": "other"}
 
 
@@ -79,21 +76,27 @@ def test_extract_category_unknown_falls_back():
 async def test_classify_text_parses_response():
     from news_summarizer import classify_text
 
-    class _FakeResp:
-        def raise_for_status(self): pass
-        def json(self): return {"content": [{"type": "text", "text": "validator"}]}
+    async def fake_runner(prompt):
+        return "validator"
 
-    class _FakeClient:
-        async def post(self, *a, **k): return _FakeResp()
-
-    assert await classify_text("Global Settlement Network joins as a validator", client=_FakeClient()) == "validator"
+    assert await classify_text("Global Settlement Network joins as a validator", runner=fake_runner) == "validator"
 
 
 @pytest.mark.asyncio
 async def test_classify_text_falls_back_on_error():
     from news_summarizer import classify_text
 
-    class _BoomClient:
-        async def post(self, *a, **k): raise RuntimeError("boom")
+    async def boom(prompt):
+        raise RuntimeError("boom")
 
-    assert await classify_text("anything", client=_BoomClient()) == "other"
+    assert await classify_text("anything", runner=boom) == "other"
+
+
+@pytest.mark.asyncio
+async def test_classify_text_falls_back_on_empty():
+    from news_summarizer import classify_text
+
+    async def empty(prompt):
+        return None
+
+    assert await classify_text("anything", runner=empty) == "other"

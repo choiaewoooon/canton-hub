@@ -46,3 +46,39 @@ def test_dedup_new_filters_existing_guids():
     fetched = [{"guid": "guid-a"}, {"guid": "guid-c"}]
     new = dedup_new(existing, fetched)
     assert [i["guid"] for i in new] == ["guid-c"]
+
+
+def test_dedup_new_collapses_syndicated_same_headline():
+    """같은 헤드라인을 여러 매체가 재공급 → guid는 달라도 1건만 남아야 한다."""
+    fetched = [
+        {"guid": "g1", "title_raw": "Canton Network creator raises $355M - CoinDesk"},
+        {"guid": "g2", "title_raw": "Canton Network creator raises $355M - Tekedia"},
+        {"guid": "g3", "title_raw": "Canton Network creator raises $355M! - MSN"},
+    ]
+    new = dedup_new([], fetched)
+    assert [i["guid"] for i in new] == ["g1"]
+
+
+def test_dedup_new_keeps_distinct_stories():
+    """서로 다른 기사는 보존해야 한다(과도한 병합 방지)."""
+    fetched = [
+        {"guid": "g1", "title_raw": "Kraken enables USDCx deposits on Canton - TradingView"},
+        {"guid": "g2", "title_raw": "21Shares launches Canton ETF on Nasdaq - CoinDesk"},
+        {"guid": "g3", "title_raw": "Visa tests private stablecoin settlement with Canton - MSN"},
+    ]
+    new = dedup_new([], fetched)
+    assert [i["guid"] for i in new] == ["g1", "g2", "g3"]
+
+
+def test_dedup_new_skips_near_duplicate_against_stored_item():
+    """기존 저장 아이템(title dict)과 거의 같은 제목도 걸러야 한다."""
+    existing = [{
+        "guid": "old",
+        "title": {"en": "Digital Asset raises $355 million to expand Canton Network"},
+    }]
+    fetched = [
+        {"guid": "new1", "title_raw": "Digital Asset raises $355 Million to expand Canton Network - The TRADE"},
+        {"guid": "new2", "title_raw": "Kraken adds USDCx support on Canton - TradingView"},
+    ]
+    new = dedup_new(existing, fetched)
+    assert [i["guid"] for i in new] == ["new2"]
