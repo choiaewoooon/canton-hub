@@ -1059,8 +1059,8 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_price, cache, 30, "price"))
     asyncio.create_task(_loop(collect_network, cache, 300, "network"))
     asyncio.create_task(_loop(collect_charts, cache, 900, "charts"))
-    asyncio.create_task(_loop(collect_feed, cache, 900, "feed"))
-    asyncio.create_task(_loop(collect_media, cache, 3600, "media"))  # 60분
+    asyncio.create_task(_loop(collect_feed, cache, 14400, "feed"))  # 4시간 = 하루 6회 (gemq 트윗 분류)
+    asyncio.create_task(_loop(collect_media, cache, 43200, "media"))  # 12시간 = 하루 2회 (gemq 뉴스 요약+번역)
     asyncio.create_task(_loop(collect_trending, cache, 900, "trending"))
     asyncio.create_task(_loop(collect_governance, cache, 3600, "governance"))
     asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))
