@@ -22,3 +22,6 @@ data/*.json
 
 # worktrees (superpowers isolated workspaces)
 .worktrees/
+
+# 로컬 .env 백업(시크릿) — 커밋 금지
+.env.bak*

@@ -13,7 +13,7 @@ from api.cache import TTLCache
 
 logger = logging.getLogger(__name__)
 
-# Fixed-window schedule for Anthropic summarization. Feed tweets are refreshed
+# Fixed-window schedule for LLM (gemq/Gemini) summarization. Feed tweets are refreshed
 # every 15 min (cheap RapidAPI), but the expensive LLM summary only runs at
 # the listed KST hours — no matter how many times collect_feed fires between.
 KST = timezone(timedelta(hours=9))
@@ -62,7 +62,7 @@ _BULLET_CHARS = "·・•"
 def _normalize_bullets(text: str, lang: str) -> str:
     """프론트 `split("·")`에 맞춰 요약 텍스트를 정규화.
 
-    - 줄 시작 불릿은 무조건 ASCII `·`로 통일 (DeepL이 ja에서 `・`로 바꾸는 이슈 상쇄)
+    - 줄 시작 불릿은 무조건 ASCII `·`로 통일 (번역기가 ja에서 `・`로 바꾸는 이슈 상쇄)
     - ko는 줄 안쪽 `·`를 `, `로 치환 (LLM이 중점을 구분자로 쓴 자리 — 본문 과쪼개짐 방지)
     - ja/zh/en의 줄 안쪽 `・`/`·`는 보존 (고유명사 구분 역할 유지)
     """
@@ -625,7 +625,7 @@ async def collect_feed(cache: TTLCache):
     the loop fetched tweets every 15 min (96×/day × 2 accounts = 192 req/day →
     plan exhausted in ~5 days). Now the RapidAPI call is gated by the same KST
     00/12 windows as the LLM summarizer — 2 fetches/day × 2 accounts × 30 days
-    = 120 req/month, well inside BASIC. Anthropic Sonnet call is independently
+    = 120 req/month, well inside BASIC. The gemq (Gemini) summary call is independently
     gated by the persisted `feed_summary.json` timestamp.
     """
     window = _current_window_start()
@@ -666,7 +666,7 @@ async def collect_feed(cache: TTLCache):
             )
         else:
             logger.info(
-                f"Feed summary (ko) cache hit (window={window.isoformat()}, cached_at={cached_ts.isoformat()}) — Anthropic call skipped"
+                f"Feed summary (ko) cache hit (window={window.isoformat()}, cached_at={cached_ts.isoformat()}) — LLM call skipped"
             )
 
         # 누락된 언어만 증분 번역 (deploy 직후 구 스키마 파일에도 자연스럽게 en/ja/zh가 채워짐)
@@ -680,7 +680,7 @@ async def collect_feed(cache: TTLCache):
             for lang, result in zip(missing, results):
                 raw = result if isinstance(result, str) and result else summaries["ko"]
                 summaries[lang] = _normalize_bullets(raw, lang)
-            logger.info(f"Feed summary translated via DeepL: {missing}")
+            logger.info(f"Feed summary translated via gemq: {missing}")
             _save_feed_summary(summaries, cached_ts)
         elif needs_ko_refresh:
             _save_feed_summary(summaries, cached_ts)
@@ -723,7 +723,7 @@ async def collect_feed(cache: TTLCache):
 
 
 async def collect_media(cache: TTLCache):
-    """Canton 미디어 RSS 수집. 신규 아이템만 Haiku 요약+분류 + DeepL 번역.
+    """Canton 미디어 RSS 수집. 신규 아이템만 gemq(Gemini) 요약+분류 + 번역.
 
     비용: 폴링은 무료, 신규 기사만 LLM 처리(하루 ~수 건). 전부 기존이면 LLM 0회.
     """
@@ -1059,8 +1059,8 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_loop(collect_price, cache, 30, "price"))
     asyncio.create_task(_loop(collect_network, cache, 300, "network"))
     asyncio.create_task(_loop(collect_charts, cache, 900, "charts"))
-    asyncio.create_task(_loop(collect_feed, cache, 900, "feed"))
-    asyncio.create_task(_loop(collect_media, cache, 3600, "media"))  # 60분
+    asyncio.create_task(_loop(collect_feed, cache, 14400, "feed"))  # 4시간 = 하루 6회 (gemq 트윗 분류)
+    asyncio.create_task(_loop(collect_media, cache, 43200, "media"))  # 12시간 = 하루 2회 (gemq 뉴스 요약+번역)
     asyncio.create_task(_loop(collect_trending, cache, 900, "trending"))
     asyncio.create_task(_loop(collect_governance, cache, 3600, "governance"))
     asyncio.create_task(_loop(collect_homepage, cache, 86400, "homepage"))

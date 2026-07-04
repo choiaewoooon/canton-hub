@@ -88,7 +88,7 @@ api/main.py
         ├── collectors/cantonscan_scraper.py     ─┼▶ CantonScan (API→HTML→Playwright)
         ├── collectors/twitter_collector.py      ─▶ RapidAPI Twitter API45
         ├── collectors/media_collector.py        ─▶ RSS 3종 (Google News / Canton 블로그 / DA 블로그)
-        ├── news_summarizer.py                   ─▶ Anthropic Haiku (KO 요약 + 카테고리 분류, 트윗 분류: classify_text)
+        ├── news_summarizer.py                   ─▶ gemq(Gemini) (KO 요약 + 카테고리 분류, 트윗 분류: classify_text)
         ├── collectors/governance_collector.py   ─▶ GitHub CIP repo
         ├── collectors/holders_collector.py      ─▶ CantonScan
         ├── collectors/kr_companies_collector.py ─▶ CantonScan party API

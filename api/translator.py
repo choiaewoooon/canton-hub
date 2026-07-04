@@ -1,60 +1,70 @@
-"""DeepL Free API 번역 헬퍼.
+"""번역 헬퍼 — gemq(Gemini) 백엔드.
 
 translate(text, source, target): 임의 source→target 번역.
 translate_ko(text, target): 한국어 소스 전용 하위호환 래퍼 (기존 호출부 유지).
-링크 태그는 tag_handling=html로 보존. 실패 시 None → 호출 측에서 폴백.
+
+DeepL Free API를 쓰다가 무료 쿼터 소진(456)으로 2026-06-21 헤드리스 LLM으로 교체,
+이후 구독 Gemini(`gemq`, `llm_cli`)로 정착 — 뉴스/트윗 요약과 동일 백엔드, 토큰 과금
+없음. HTML 태그(<a> 링크 등)는 프롬프트로 보존을 강제한다. 실패/빈입력 시 None →
+호출 측에서 ko 원문으로 폴백.
 """
+import asyncio
 import logging
 
-import httpx
-
-import config
+from llm_cli import run_llm
 
 logger = logging.getLogger(__name__)
 
-# target 언어 → DeepL target_lang 코드
-DEEPL_TARGETS = {
-    "en": "EN-US",
-    "ja": "JA",
-    "zh": "ZH-HANS",
-    "ko": "KO",
-}
-# source 언어 → DeepL source_lang 코드
-DEEPL_SOURCES = {
-    "en": "EN",
-    "ja": "JA",
-    "zh": "ZH",
-    "ko": "KO",
+# 지원 언어 코드 → 프롬프트용 영어 언어명
+LANG_NAMES = {
+    "en": "English",
+    "ja": "Japanese",
+    "zh": "Simplified Chinese",
+    "ko": "Korean",
 }
 
+# 콜드스타트 시 다수 항목을 한꺼번에 번역해도 gemq 서브프로세스가 폭주하지
+# 않도록 동시 실행 수를 제한한다(현재 호출부는 대부분 순차지만 방어적으로).
+_SEM = asyncio.Semaphore(4)
 
-async def translate(text: str, source: str, target: str) -> str | None:
-    if not config.DEEPL_API_KEY or not text:
+_PROMPT = """You are a professional translator. Translate the text below from {src} into {tgt}.
+
+Output rules (strict):
+- Output ONLY the translated text. No preamble, no quotes, no notes, no explanation.
+- Preserve every HTML tag exactly as-is (e.g. <a href="...">, </a>, <b>); translate only the human-readable text, never tag names, attributes, or URLs.
+- Keep "$CC", ticker symbols, URLs, numbers, @handles, and proper nouns unchanged.
+- Preserve line breaks and the leading "·" bullet of each line.
+- Match the original tone and length; never add or drop information.
+
+Text:
+{text}"""
+
+
+async def translate(text: str, source: str, target: str, *, runner=None) -> str | None:
+    """source→target 번역. 빈입력·미지원언어·실패 → None. runner는 테스트 주입용."""
+    if not text or not text.strip():
         return None
-    target_code = DEEPL_TARGETS.get(target)
-    source_code = DEEPL_SOURCES.get(source)
-    if not target_code:
-        logger.warning(f"DeepL: unsupported target lang '{target}'")
+    tgt = LANG_NAMES.get(target)
+    if not tgt:
+        logger.warning(f"translate: unsupported target lang '{target}'")
         return None
+    if source == target:
+        return text
+
+    src = LANG_NAMES.get(source, source)
+    prompt = _PROMPT.format(src=src, tgt=tgt, text=text)
+    run = runner or run_llm
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            data = {
-                "text": text,
-                "target_lang": target_code,
-                "tag_handling": "html",
-            }
-            if source_code:
-                data["source_lang"] = source_code
-            resp = await client.post(
-                config.DEEPL_API_URL,
-                headers={"Authorization": f"DeepL-Auth-Key {config.DEEPL_API_KEY}"},
-                data=data,
-            )
-            resp.raise_for_status()
-            return resp.json()["translations"][0]["text"]
-    except Exception as e:
-        logger.warning(f"DeepL translate {source}->{target} failed: {e}")
+        async with _SEM:
+            out = await run(prompt)
+    except Exception as e:  # 수집기 규약: 삼키고 None
+        logger.warning(f"translate {source}->{target} failed: {e}")
         return None
+
+    if not out or not out.strip():
+        logger.warning(f"translate {source}->{target}: empty result")
+        return None
+    return out.strip()
 
 
 async def translate_ko(text: str, target: str) -> str | None:
