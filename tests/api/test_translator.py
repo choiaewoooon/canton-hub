@@ -1,6 +1,5 @@
 # tests/api/test_translator.py
 import pytest
-import config
 from api.translator import translate, translate_ko
 
 
@@ -13,7 +12,7 @@ async def test_translate_returns_none_for_empty_text():
 @pytest.mark.asyncio
 async def test_translate_returns_none_for_unsupported_target():
     async def fake_run(prompt, model=None):
-        raise AssertionError("미지원 언어면 claude를 부르면 안 된다")
+        raise AssertionError("미지원 언어면 LLM을 부르면 안 된다")
 
     assert await translate("hello", "en", "xx", runner=fake_run) is None
 
@@ -21,25 +20,23 @@ async def test_translate_returns_none_for_unsupported_target():
 @pytest.mark.asyncio
 async def test_translate_same_lang_returns_input_unchanged():
     async def fake_run(prompt, model=None):
-        raise AssertionError("source==target면 claude를 부르면 안 된다")
+        raise AssertionError("source==target면 LLM을 부르면 안 된다")
 
     assert await translate("그대로", "ko", "ko", runner=fake_run) == "그대로"
 
 
 @pytest.mark.asyncio
-async def test_translate_calls_claude_strips_and_passes_model():
+async def test_translate_calls_llm_and_strips_result():
     seen = {}
 
     async def fake_run(prompt, model=None):
         seen["prompt"] = prompt
-        seen["model"] = model
         return '  Hello <a href="u">link</a>  '
 
     out = await translate('안녕 <a href="u">링크</a>', "ko", "en", runner=fake_run)
     assert out == 'Hello <a href="u">link</a>'  # strip 적용
     assert "Korean" in seen["prompt"] and "English" in seen["prompt"]
     assert '안녕 <a href="u">링크</a>' in seen["prompt"]  # 원문 포함
-    assert seen["model"] == config.ANTHROPIC_TRANSLATE_MODEL
 
 
 @pytest.mark.asyncio
@@ -57,7 +54,7 @@ async def test_translate_returns_none_when_runner_returns_empty():
 @pytest.mark.asyncio
 async def test_translate_swallows_runner_exception():
     async def fake_boom(prompt, model=None):
-        raise RuntimeError("claude 죽음")
+        raise RuntimeError("LLM 죽음")
 
     assert await translate("안녕", "ko", "zh", runner=fake_boom) is None
 

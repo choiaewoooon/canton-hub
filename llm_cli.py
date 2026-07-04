@@ -1,16 +1,19 @@
-# claude_cli.py
-"""LLM 헤드리스 호출 래퍼 (이제 gemq=Gemini 백엔드).
+# llm_cli.py
+"""LLM 헤드리스 호출 래퍼 — 백엔드는 gemq(Gemini).
 
-과거엔 `claude -p`(Max 구독)로 분류/요약/번역을 돌렸으나, 작은 작업마다 Claude Code
-시스템 프롬프트 전체가 입력에 붙어 토큰(구독 사용량)이 과하게 소모됐다. 분류·요약·번역은
-오프로드하기 좋은 작업이라 유료 구독 Gemini(`gemq`, 풀패스 래퍼)로 전환한다.
+분류·요약·번역용 LLM 호출을 한 곳으로 모은다. 현재 백엔드는 유료 구독 Gemini를
+부르는 `gemq` 풀패스 래퍼다(토큰 과금 없음).
 
-- gemq는 `gemq [flash|pro] "<지시문>"` 형태, 출력은 순수 텍스트(claude의 JSON 래퍼 없음).
-- 모델 키 생략 시 pro(Gemini 3.1 Pro High, 품질) 기본.
-- run_claude 시그니처/반환 규약은 그대로 유지(호출부 무변경): 실패/타임아웃/바이너리
-  부재 → None (호출부가 폴백 처리).
+연혁:
+- 최초: Anthropic Messages API(httpx 직접 POST) — API 키 과금.
+- 2026-06-21: 헤드리스 `claude -p`(Max 구독)로 전환 — 키 과금 제거. 그러나 호출마다
+  Claude Code 시스템 프롬프트가 입력에 붙어 구독 사용량이 과하게 소모됐다.
+- 2026-06: 분류·요약·번역은 오프로드하기 좋은 작업이라 구독 Gemini(`gemq`)로 전환.
 
-함수명은 호환을 위해 run_claude로 유지하지만 실제 백엔드는 gemq다.
+gemq 규약: `gemq [flash|pro] "<지시문>"`, 출력은 순수 텍스트. 모델 키 생략 시 pro
+(Gemini 3.1 Pro High, 품질) 기본. 여기선 항상 pro로 라우팅한다.
+
+`run_llm`은 실패/타임아웃/바이너리 부재 시 예외 대신 None을 반환한다(호출부가 폴백 처리).
 """
 import asyncio
 import logging
@@ -23,14 +26,14 @@ GEMQ_BIN = os.getenv("GEMQ_BIN", "/Users/choejaewon/.local/bin/gemq")
 DEFAULT_TIMEOUT = 120.0
 
 
-async def run_claude(
+async def run_llm(
     prompt: str, *, model: str | None = None, timeout: float = DEFAULT_TIMEOUT
 ) -> str | None:
     """`gemq pro <prompt>` 실행 → 모델 텍스트 응답 반환.
 
     실패/타임아웃/바이너리 부재 → None (호출부가 폴백 처리). 구독 Gemini라 토큰
-    과금이 없다. model 인자는 하위호환용으로 받기만 하고, 품질 유지를 위해 항상
-    gemq pro(Gemini 3.1 Pro High)로 라우팅한다(Anthropic 모델 ID는 무시).
+    과금이 없다. `model` 인자는 하위호환용 시그니처로 남겨둘 뿐 현재는 무시된다
+    (gemq는 항상 pro 티어로 라우팅).
     """
     args = [GEMQ_BIN, "pro", prompt]
     try:

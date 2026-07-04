@@ -86,7 +86,7 @@ cd web && vercel --prod --yes
 
 > 프로덕션에서는 반드시 `ALLOWED_ORIGINS`를 실제 Vercel URL로 좁힐 것. 비워두면 `*` 폴백.
 >
-> AI 요약(news/tweet)·다국어 번역은 헤드리스 `claude -p`(Mac Max 구독)로 동작하므로 `ANTHROPIC_API_KEY`/`DEEPL_API_KEY`는 불필요하다(대신 그 Mac에 claude CLI 로그인 필요).
+> AI 요약(news/tweet)·다국어 번역은 구독 Gemini(`gemq`, `llm_cli.py` 경유)로 동작하므로 `ANTHROPIC_API_KEY`/`DEEPL_API_KEY`는 불필요하다(대신 그 Mac에 `gemq`/Gemini 인증 필요).
 
 ## Project Structure
 

@@ -90,7 +90,7 @@ media_collector.py — RSS 3종 fetch + feedparser 파싱
     ▼
 신규 항목만 처리 (회당 최대 12건 캡 — 비용 가드)
     │
-    ├── news_summarizer.py → Anthropic Haiku
+    ├── news_summarizer.py → gemq(Gemini)
     │       한국어 1-call 요약 + 카테고리 분류
     │       (9개 카테고리: partnership/validator/etf_product/institutional/
     │        dat_vehicle/tokenomics/funding/network_metric/other)
@@ -151,7 +151,7 @@ GET /api/analytics/funding-rates
     ▼
 twitter_collector.py — RapidAPI Twitter API45 fetch
     │  url 기준 중복 제거
-    ├── news_summarizer.classify_text → Anthropic Haiku
+    ├── news_summarizer.classify_text → gemq(Gemini)
     │       각 신규 트윗을 9개 카테고리 중 하나로 분류
     │
     ▼

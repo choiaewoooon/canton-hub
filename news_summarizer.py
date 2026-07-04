@@ -1,15 +1,15 @@
 # news_summarizer.py
-"""뉴스 한줄 요약 + 유형 분류 (Claude Code 헤드리스 `claude -p`, 1회 호출).
+"""뉴스 한줄 요약 + 유형 분류 (gemq=Gemini 헤드리스, 1회 호출).
 
 canton-hub가 Mac 로컬(launchd)에서 돌게 되면서 토큰 과금되는 Anthropic API 대신
-구독으로 도는 `claude -p`를 쓴다(키 불필요·토큰 과금 없음). CLI 실패/부재 시
+구독으로 도는 gemq(Gemini)를 쓴다(키 불필요·토큰 과금 없음). LLM 실패/부재 시
 폴백({"summary_ko":"","category":"other"}). 요약은 한국어 한 문장, 분류는
 CATEGORY_KEYS 중 하나(불확실하면 other).
 """
 import json
 import logging
 
-from claude_cli import run_claude
+from llm_cli import run_llm
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ JSON만 출력해라(설명 금지): {{"summary": "...", "category": "키"}}
 
 
 def _parse_classification(text: str) -> dict:
-    """Anthropic이 돌려준 텍스트(JSON)를 파싱. 실패/이상치는 안전 폴백.
+    """LLM이 돌려준 텍스트(JSON)를 파싱. 실패/이상치는 안전 폴백.
 
     모델이 종종 ```json ... ``` 코드펜스나 앞뒤 설명을 붙이므로,
     첫 '{'부터 마지막 '}'까지의 블록만 추출해 파싱한다.
@@ -63,9 +63,9 @@ def _parse_classification(text: str) -> dict:
 async def summarize_and_classify(title: str, description: str, runner=None) -> dict:
     """제목+내용 → {"summary_ko", "category"}. CLI 실패/부재 시 폴백.
 
-    runner: 테스트용 주입 포인트(기본 run_claude) — 프롬프트→텍스트 비동기 함수.
+    runner: 테스트용 주입 포인트(기본 run_llm) — 프롬프트→텍스트 비동기 함수.
     """
-    run = runner or run_claude
+    run = runner or run_llm
     prompt = _PROMPT.format(title=title or "", description=(description or "")[:1500])
     try:
         text = await run(prompt)
@@ -99,9 +99,9 @@ def _extract_category(text: str) -> str:
 async def classify_text(text: str, runner=None) -> str:
     """짧은 글(트윗)을 유형 키 하나로 분류. CLI 실패/부재 시 'other'.
 
-    runner: 테스트용 주입 포인트(기본 run_claude).
+    runner: 테스트용 주입 포인트(기본 run_llm).
     """
-    run = runner or run_claude
+    run = runner or run_llm
     prompt = _CLASSIFY_PROMPT.format(text=(text or "")[:600])
     try:
         out = await run(prompt)

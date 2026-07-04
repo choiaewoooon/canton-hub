@@ -1,17 +1,17 @@
 """
 트윗 요약 모듈 (canton-hub backend 버전)
 
-Claude Code 헤드리스(`claude -p`)로 한국어 요약을 생성한다. canton-hub가 Fly.io
-에서 Mac 로컬(launchd)로 옮겨오면서, 토큰 과금되는 Anthropic API 대신 구독으로
-도는 CLI를 쓴다(키 불필요·토큰 과금 없음). 같은 Mac의 canton-telegram-bot와 동일.
+gemq(Gemini) 헤드리스로 한국어 요약을 생성한다. canton-hub가 Fly.io에서 Mac
+로컬(launchd)로 옮겨오면서, 토큰 과금되는 Anthropic API 대신 구독으로 도는 gemq를
+쓴다(키 불필요·토큰 과금 없음). 같은 Mac의 canton-telegram-bot와 동일 백엔드.
 
 동작:
-  - `claude -p` 호출 성공 → 요약 텍스트
-  - CLI 부재/실패/빈 응답 → _fallback_format (트윗 원문 bullet)
+  - gemq 호출 성공 → 요약 텍스트
+  - LLM 부재/실패/빈 응답 → _fallback_format (트윗 원문 bullet)
 """
 import logging
 
-from claude_cli import run_claude
+from llm_cli import run_llm
 from collectors import TweetData
 
 logger = logging.getLogger(__name__)
@@ -73,12 +73,12 @@ URL 참조:
 {ref_text}"""
 
     try:
-        summary = await run_claude(prompt)
+        summary = await run_llm(prompt)
     except Exception as e:
         logger.error(f"트윗 요약 실패: {e}")
         return _fallback_format(all_tweets)
     if not summary:
-        logger.warning("claude -p 빈 응답/실패 — fallback 포맷으로 대체")
+        logger.warning("gemq 빈 응답/실패 — fallback 포맷으로 대체")
         return _fallback_format(all_tweets)
     logger.info(f"트윗 요약 완료 ({len(summary)} chars)")
     return summary

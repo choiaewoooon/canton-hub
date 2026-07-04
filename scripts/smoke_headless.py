@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""헤드리스(claude -p) 전환 스모크 테스트 — Mac에서 실행.
+"""헤드리스 LLM(gemq/Gemini) 스모크 테스트 — Mac에서 실행.
 
-실제 `claude -p`를 호출해 뉴스 요약+분류 / 트윗 분류가 정상 동작하는지(구독 인증 ·
+실제 gemq를 호출해 뉴스 요약+분류 / 트윗 분류가 정상 동작하는지(구독 인증 ·
 바이너리 경로 · JSON 파싱까지) 한 번에 확인한다. API 키 불필요.
 
 실행:
@@ -16,19 +16,19 @@ from pathlib import Path
 # repo 루트를 import 경로에 추가
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from claude_cli import CLAUDE_BIN, run_claude  # noqa: E402
+from llm_cli import GEMQ_BIN, run_llm  # noqa: E402
 from news_summarizer import CATEGORY_KEYS, classify_text, summarize_and_classify  # noqa: E402
 
 
 async def main() -> int:
-    print(f"CLAUDE_BIN = {CLAUDE_BIN}")
-    if not Path(CLAUDE_BIN).exists():
-        print(f"  ⚠️  {CLAUDE_BIN} 가 없음 — CLAUDE_BIN 환경변수로 경로를 지정하세요.")
+    print(f"GEMQ_BIN = {GEMQ_BIN}")
+    if not Path(GEMQ_BIN).exists():
+        print(f"  ⚠️  {GEMQ_BIN} 가 없음 — GEMQ_BIN 환경변수로 경로를 지정하세요.")
 
-    # 1) 원시 claude -p 호출 (인증/경로 확인)
+    # 1) 원시 gemq 호출 (인증/경로 확인)
     t = time.perf_counter()
-    raw = await run_claude("한 단어로만 답해. 정상 동작하면: OK")
-    print(f"\n[1] run_claude        → {raw!r}   ({time.perf_counter() - t:.1f}s)")
+    raw = await run_llm("한 단어로만 답해. 정상 동작하면: OK")
+    print(f"\n[1] run_llm           → {raw!r}   ({time.perf_counter() - t:.1f}s)")
 
     # 2) 실제 뉴스 1건 요약+분류 (전체 파이프라인)
     t = time.perf_counter()
@@ -48,7 +48,7 @@ async def main() -> int:
 
     ok = bool(raw) and bool(news.get("summary_ko")) and news.get("category") in CATEGORY_KEYS
     print("\n결과:", "✅ 헤드리스 정상 동작 (API 없이 구독으로 요약됨)"
-          if ok else "⚠️  일부 폴백 — 위 로그/`claude` 로그인 상태를 확인하세요.")
+          if ok else "⚠️  일부 폴백 — 위 로그/`gemq`(Gemini) 인증 상태를 확인하세요.")
     return 0 if ok else 1
 
 
