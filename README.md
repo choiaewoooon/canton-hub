@@ -1,8 +1,10 @@
 # Canton Hub
 
-Canton Network ($CC) 실시간 대시보드 백엔드. 외부 데이터 소스(CoinGecko / CantonScan / RapidAPI / GitHub)를 주기적으로 수집하고, REST + SSE 엔드포인트로 Next.js 프론트엔드에 공급한다.
+> 라이브: **https://canton-hub.vercel.app**
 
-이 레포는 **백엔드 (FastAPI)** + **프론트엔드 (`web/`, Next.js)** 두 개의 독립 배포 단위를 포함한다. 본 README는 백엔드 기준이며, 프론트엔드 안내는 [web/README.md](./web/README.md)를 참조.
+Canton Network ($CC) 실시간 대시보드 백엔드. 외부 데이터 소스(CoinGecko / CantonScan / RapidAPI / GitHub)를 주기적으로 수집하고, REST + SSE 엔드포인트로 Next.js 프론트엔드에 전달한다.
+
+이 레포는 **백엔드 (FastAPI)**와 **프론트엔드 (`web/`, Next.js)**, 두 개의 독립된 배포 단위로 나뉜다. 본 README는 백엔드 기준이며, 프론트엔드 안내는 [web/README.md](./web/README.md)를 참조.
 
 ## Tech Stack
 
@@ -57,7 +59,7 @@ pytest tests/
 
 ### Deploy (Mac local + Cloudflare Tunnel)
 
-`DEPLOY.md` 참조. 현재 구조: uvicorn을 `launchd`로 상시 구동, `cloudflared` Quick Tunnel이 public URL을 만들어 Vercel의 `NEXT_PUBLIC_API_URL`을 자동 갱신.
+`DEPLOY.md` 참조. 현재는 uvicorn을 `launchd`로 상시 구동하고, `cloudflared` Quick Tunnel로 공개 URL을 만들어 Vercel의 `NEXT_PUBLIC_API_URL`을 자동 갱신한다.
 
 ```bash
 # 백엔드 재기동 (코드 변경 반영)
@@ -70,7 +72,7 @@ launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-tunnel
 cd web && vercel --prod --yes
 ```
 
-> 이전 Fly.io 배포(`canton-api.fly.dev`)는 2026-04 트라이얼 만료로 destroy됨.
+> 이전 Fly.io 배포(`canton-api.fly.dev`)는 2026-04 트라이얼 만료로 폐기됨.
 
 ## Environment Variables
 
@@ -86,7 +88,7 @@ cd web && vercel --prod --yes
 
 > 프로덕션에서는 반드시 `ALLOWED_ORIGINS`를 실제 Vercel URL로 좁힐 것. 비워두면 `*` 폴백.
 >
-> AI 요약(news/tweet)·다국어 번역은 구독 Gemini(`gemq`, `llm_cli.py` 경유)로 동작하므로 `ANTHROPIC_API_KEY`/`DEEPL_API_KEY`는 불필요하다(대신 그 Mac에 `gemq`/Gemini 인증 필요).
+> AI 요약(news/tweet)·다국어 번역은 `gemq` 래퍼(`llm_cli.py` 경유)로 Gemini CLI를 호출해 동작하므로 `ANTHROPIC_API_KEY`/`DEEPL_API_KEY`는 불필요하다(대신 실행하는 Mac에 `gemq`(Gemini CLI 래퍼) 인증 필요).
 
 ## Project Structure
 
