@@ -16,6 +16,8 @@ from typing import Optional
 
 import httpx
 
+from . import net_guard
+
 import config
 
 logger = logging.getLogger(__name__)
@@ -420,7 +422,7 @@ async def collect_dat(cc_price: Optional[float]) -> dict:
     last_good = _last_good_prices()  # 직전 사이클의 티커별 정상 주가 (폴백용)
     out_companies: list[dict] = []
 
-    async with httpx.AsyncClient(headers=_HTTP_HEADERS) as client:
+    async with net_guard.make_client(headers=_HTTP_HEADERS) as client:
         krw_rate = await _fetch_krw_rate(client)
         cc_hist = await _fetch_cc_history(client)  # 전 회사 공통 ($CC 6개월 일별)
 

@@ -5,14 +5,19 @@
 
 Sources:
 - DEX Perp: Hyperliquid, Extended, Aster, Lighter
-- CEX Spot: Bybit, OKX, Kraken
-- CEX Perp: Bybit Futures, OKX Futures, Binance Futures
+- CEX Spot: OKX, Kraken
+- CEX Perp: OKX Futures, Binance Futures
+
+호출은 net_guard의 서킷 브레이커를 거친다 — 한 거래소가 DNS 단에서 멈춰도
+나머지 수집기까지 끌고 들어가지 않게 하기 위함(2026-07-29 전체 마비 사고).
 """
 import asyncio
 import logging
 from dataclasses import dataclass
 
 import httpx
+
+from . import net_guard
 
 logger = logging.getLogger(__name__)
 
@@ -105,21 +110,12 @@ async def fetch_lighter(client: httpx.AsyncClient) -> LivePrice | None:
 # CEX Spot Sources
 # ============================================================
 
-async def fetch_bybit_spot(client: httpx.AsyncClient) -> LivePrice | None:
-    try:
-        resp = await client.get(
-            "https://api.bybit.com/v5/market/tickers",
-            params={"category": "spot", "symbol": "CCUSDT"},
-            timeout=5,
-        )
-        resp.raise_for_status()
-        items = resp.json().get("result", {}).get("list", [])
-        if items:
-            price = float(items[0].get("lastPrice", 0))
-            return LivePrice("Bybit", "CEX", "spot", "CC/USDT", price, "bybit.com")
-    except Exception as e:
-        logger.warning(f"Bybit spot live price failed: {e}")
-    return None
+# Bybit(spot/perp)은 2026-07-29에 제거됐다.
+# 한국망에서 api.bybit.com의 getaddrinfo가 30초 행 → gaierror다.
+# uvloop이 DNS를 넘기는 libuv 스레드풀(기본 4개)을 이게 포화시켜
+# 프로세스 안의 모든 수집기가 함께 죽었다 (net_guard 모듈 docstring 참조).
+# 되살리려면 먼저 `python3 -c "import socket; socket.getaddrinfo('api.bybit.com', 443)"`가
+# 즉시 끝나는지 확인할 것.
 
 
 async def fetch_okx_spot(client: httpx.AsyncClient) -> LivePrice | None:
@@ -161,23 +157,6 @@ async def fetch_kraken_spot(client: httpx.AsyncClient) -> LivePrice | None:
 # CEX Perp Sources
 # ============================================================
 
-async def fetch_bybit_perp(client: httpx.AsyncClient) -> LivePrice | None:
-    try:
-        resp = await client.get(
-            "https://api.bybit.com/v5/market/tickers",
-            params={"category": "linear", "symbol": "CCUSDT"},
-            timeout=5,
-        )
-        resp.raise_for_status()
-        items = resp.json().get("result", {}).get("list", [])
-        if items:
-            price = float(items[0].get("lastPrice", 0))
-            return LivePrice("Bybit Perp", "CEX", "perpetual", "CC/USDT", price, "bybit.com")
-    except Exception as e:
-        logger.warning(f"Bybit perp live price failed: {e}")
-    return None
-
-
 async def fetch_okx_perp(client: httpx.AsyncClient) -> LivePrice | None:
     try:
         resp = await client.get(
@@ -217,7 +196,7 @@ async def fetch_binance_perp(client: httpx.AsyncClient) -> LivePrice | None:
 
 async def collect_all_realtime_prices() -> list[LivePrice]:
     """모든 소스에서 가격 동시 수집."""
-    async with httpx.AsyncClient() as client:
+    async with net_guard.make_client() as client:
         results = await asyncio.gather(
             # DEX Perp
             fetch_hyperliquid(client),
@@ -225,11 +204,9 @@ async def collect_all_realtime_prices() -> list[LivePrice]:
             fetch_aster(client),
             fetch_lighter(client),
             # CEX Spot
-            fetch_bybit_spot(client),
             fetch_okx_spot(client),
             fetch_kraken_spot(client),
             # CEX Perp
-            fetch_bybit_perp(client),
             fetch_okx_perp(client),
             fetch_binance_perp(client),
             return_exceptions=True,

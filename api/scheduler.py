@@ -10,6 +10,7 @@ from pathlib import Path
 import httpx
 
 from api.cache import TTLCache
+from collectors import net_guard
 
 logger = logging.getLogger(__name__)
 
@@ -452,7 +453,7 @@ async def _fetch_ohlc(days: str) -> list[dict]:
     headers = {"Accept": "application/json"}
     if config.COINGECKO_API_KEY:
         headers["x-cg-demo-api-key"] = config.COINGECKO_API_KEY
-    async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+    async with net_guard.make_client(timeout=15, headers=headers) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
         raw = resp.json()
@@ -737,7 +738,7 @@ async def collect_media(cache: TTLCache):
     existing = load_media_items()
     fetched: list[dict] = []
     try:
-        async with httpx.AsyncClient(
+        async with net_guard.make_client(
             timeout=10, follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 (CantonHub RSS)"},
         ) as client:

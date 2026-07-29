@@ -10,6 +10,8 @@ import httpx
 
 import config
 
+from . import net_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +40,8 @@ class PriceCollector:
         if config.COINGECKO_API_KEY:
             headers["x-cg-demo-api-key"] = config.COINGECKO_API_KEY
 
-        self.client = httpx.AsyncClient(
+        # net_guard 경유: 다른 호스트가 DNS 단에서 멈춰도 가격 수집이 같이 죽지 않게 한다.
+        self.client = net_guard.make_client(
             timeout=15,
             headers=headers,
         )
@@ -53,13 +56,15 @@ class PriceCollector:
             if data.fetched:
                 return data
         except Exception as e:
-            logger.warning(f"markets API 실패: {e}")
+            # {e!r} 사용: 타임아웃류 예외는 str(e)가 빈 문자열이라
+            # "markets API 실패: " 만 남아 진단이 불가능했음 (2026-07 stale-process 사고)
+            logger.warning(f"markets API 실패: {e!r}")
 
         # 방법 2: /simple/price (기본 데이터, 폴백)
         try:
             data = await self._fetch_simple_price()
         except Exception as e:
-            logger.error(f"simple price API도 실패: {e}")
+            logger.error(f"simple price API도 실패: {e!r}")
 
         return data
 

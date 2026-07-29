@@ -50,7 +50,7 @@ return _EMPTY_* skeleton (HTTP 200, empty payload)
 | 9 | Extended `/api/v1/info/markets` | REST | 5s | `realtime_prices.py` | same |
 | 10 | Aster `/fapi/v1/openInterest` | REST | 5s | `realtime_prices.py`, `dex_oi_collector.py` | same |
 | 11 | Lighter `/api/v1/exchangeStats` | REST | 5s | `realtime_prices.py` | same |
-| 12 | Bybit `/v5/market/tickers` | REST | 5s | `realtime_prices.py` | same |
+| ~~12~~ | ~~Bybit `/v5/market/tickers`~~ | — | — | **2026-07-29 제거** | 한국망에서 `api.bybit.com` DNS가 30초 행 → 프로세스 전체 DNS 고갈 |
 | 13 | OKX `/api/v5/market/ticker` | REST | 5s | `realtime_prices.py` | same |
 | 14 | Kraken `/0/public/Ticker` | REST | 5s | `realtime_prices.py` | same |
 | 15 | Binance Futures `/fapi/v1/ticker/24hr` | REST | 5s | `realtime_prices.py` | same |
@@ -63,7 +63,7 @@ return _EMPTY_* skeleton (HTTP 200, empty payload)
 | 22 | Aster REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
 | 23 | Extended DEX REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
 | 24 | Binance Futures REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
-| 25 | Bybit REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
+| ~~25~~ | ~~Bybit REST API (펀딩비)~~ | — | — | **2026-07-29 제거** | 위와 동일 |
 | 26 | OKX REST API (펀딩비) | REST | 60s | `funding_rates.py` | same |
 | 27 | Yahoo Finance chart endpoint (CNTN 주가/시총, 키 불필요) | REST | ~5min | `dat_collector.py` | `/api/analytics/dat` |
 | 28 | open.er-api.com (USD/KRW 환율, 키 불필요) | REST | ~5min | `dat_collector.py` | `/api/analytics/dat` |
@@ -117,9 +117,9 @@ GET /api/feed — tweet:items + media:items 머지 → ts 내림차순 페이지
 60초 폴링 (collect_funding_rates, scheduler.py)
     │
     ▼
-funding_rates.py — 7개 거래소 병렬 fan-out
+funding_rates.py — 6개 거래소 병렬 fan-out
     │  DEX: Hyperliquid (1h 정산), Lighter (1h), Extended (1h), Aster (8h)
-    │  CEX: Binance (8h), Bybit (8h), OKX (8h)
+    │  CEX: Binance (8h), OKX (8h)
     │
     ├── 각 fetcher: 거래소별 REST 호출 → FundingRate dataclass
     │       FundingRate.to_apr() — settlement_interval_h 기반 APR 정규화
@@ -391,5 +391,6 @@ python -c "from canton_hub.config import validate_env; validate_env()"
 | 2026-04-14 | Initial generation | docs-init auto-generation |
 | 2026-05-30 | 피드 v2 반영: 트윗 누적 링버퍼(data/tweet_items.json), Haiku 카테고리 분류, ai_summary에 뉴스 헤드라인 포함, 2.2 트윗 수집 흐름 섹션 추가 | feat/feed-v2-categorize-paginate |
 | 2026-05-31 | 펀딩비 데이터 소스 추가: 7개 거래소(#20–26), 2.3 펀딩비 수집 흐름 섹션 추가 | feat/funding-rates |
+| 2026-07-29 | Bybit 소스 2종(#12 실시간가격, #25 펀딩비) 제거 — `api.bybit.com` DNS 30초 행이 uvloop libuv 스레드풀을 포화시켜 전 수집기 마비. 모든 외부 호출을 `net_guard` 서킷 브레이커 경유로 변경 | fix/dns-starvation |
 
 <!-- TODO: add entries on every collector change, TTL adjustment, or new data source -->

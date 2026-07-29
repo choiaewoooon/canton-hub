@@ -45,7 +45,8 @@ canton-hub/
 │   ├── holders_collector.py         # CantonScan 홀더
 │   ├── kr_companies_collector.py    # 한국 기업 지갑 (하드코딩 + 검증)
 │   ├── dex_oi_collector.py          # DEX OI
-│   ├── realtime_prices.py           # 10개 거래소 5초 polling
+│   ├── realtime_prices.py           # 8개 거래소 5초 polling
+│   ├── net_guard.py                 # 호스트별 DNS/연결 서킷 브레이커 (모든 수집기가 경유)
 │   └── coingecko_scraper.py         # CoinGecko 파생상품 페이지 Playwright
 ├── web/                     # Next.js 프론트엔드 (별도 Vercel 배포 단위)
 ├── data/                    # 파일 캐시 (재시작 시 재수집용 폴백)
@@ -79,9 +80,11 @@ canton-hub/
 | 헬스체크 | `curl http://localhost:8000/api/health` |
 | 단일 엔드포인트 smoke | `curl http://localhost:8000/api/price` |
 | 테스트 | `pytest tests/` |
-| 백엔드 재기동 | `launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend` |
+| 백엔드 재기동 (코드 변경 반영) | `launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend` |
+| 백엔드 재기동 (**plist 변경** 반영) | `launchctl bootout gui/$(id -u)/com.cobling.canton-hub-backend; launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cobling.canton-hub-backend.plist` — `kickstart`는 launchd가 캐시한 job 정의를 다시 읽지 않아 **환경변수 변경이 반영되지 않는다** |
+| 주기적 자동 재기동 (매일 05:00) | `com.cobling.canton-hub-restart` LaunchAgent — 장수명 프로세스 rot 방지. 수동 실행: `launchctl kickstart gui/$(id -u)/com.cobling.canton-hub-restart` |
 | 터널 재기동 (새 URL + Vercel 자동 갱신) | `launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-tunnel` |
-| 현재 터널 URL | `cat /tmp/canton-hub-tunnel-url.txt` |
+| 현재 터널 URL | `grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" /tmp/canton-hub-tunnel.log \| tail -1` — `/tmp/canton-hub-tunnel-url.txt`는 /tmp 정리로 사라질 수 있어 로그가 더 확실하다 |
 | 백엔드 로그 | `tail -f /tmp/canton-hub-backend.err.log` |
 | Vercel 재배포 | `cd web && vercel --prod --yes` |
 
@@ -136,6 +139,24 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 | 하드코딩 URL | `http` in `collectors/` | `"https://api.coingecko.com/..."` 인라인 | `config.COINGECKO_API_URL` 사용 |
 | Sync 블로킹 | `requests.` or `time.sleep` | `requests.get(...)` | `await client.get(...)` + `asyncio.sleep` |
 | 캐시 미스 404 | 라우트가 500 반환 | `raise HTTPException(500)` | `cache.get(...) or _EMPTY_*` 폴백 |
+| **맨 httpx 클라이언트** | `httpx.AsyncClient(` in `collectors/` | `httpx.AsyncClient(timeout=5)` | `net_guard.make_client(timeout=5)` — 막힌 호스트 하나가 프로세스 전체 DNS를 굶기는 것을 막음 |
+| **스크래퍼 단일 KPI 대기** | `for _ in range(` in `*_scraper.py` | KPI 하나만 렌더되면 break | 파싱할 KPI 전부 확보될 때까지 대기 + 저장은 merge |
+
+### 4.1 외부 호스트가 "느린" 게 아니라 "DNS에서 멈출" 때 (2026-07-29)
+
+증상이 **전 지표 동시 N/A**면 개별 수집기를 의심하기 전에 프로세스 DNS부터 본다.
+
+```bash
+# 1) 프로세스가 DNS에 붙잡혀 있는가 (uv__getaddrinfo_work가 보이면 확정)
+sample $(launchctl list | awk '/canton-hub-backend/{print $1}') 5 | grep -c getaddrinfo
+# 2) TCP 시도조차 못 하는가 (SYN_SENT가 0이면 DNS 단계에서 죽은 것)
+lsof -nP -p $(launchctl list | awk '/canton-hub-backend/{print $1}') -a -i | grep -c SYN_SENT
+# 3) 어느 호스트가 범인인가 (30초 걸리는 놈이 범인)
+python3 -c "import socket,time; t=time.time(); socket.getaddrinfo('<host>',443); print(time.time()-t)"
+```
+
+`getaddrinfo`는 **OS 레벨에서 취소가 불가능**하다. httpx 타임아웃은 파이썬 await만 끊을 뿐
+libuv 워커 스레드는 30초 내내 잡혀 있으므로, 타임아웃을 줄이는 것은 해결책이 아니다.
 
 ## 5. Evidence-Based Completion
 
@@ -213,3 +234,6 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 | 2026-06-21 | news/tweet 요약을 Anthropic API(httpx 직접 POST) → 헤드리스 `claude -p`(`claude_cli.py`)로 전환 | Mac launchd가 Max 구독으로 도므로 토큰 과금 제거. 옛 SDK 코드를 물고 돌던 stale 프로세스가 월 $4.63 누수 중이었음 → 키 제거 + 재시작 |
 | 2026-06-21 | 다국어 번역 DeepL Free → 헤드리스 `claude -p` 전환 | DeepL 무료 쿼터 소진(456)으로 ko↔en/ja/zh 번역 전면 실패. `ANTHROPIC_API_KEY`/`DEEPL_API_KEY` 모두 불필요해져 `.env`에서 제거 |
 | 2026-07-04 | LLM 요약·번역 백엔드 명칭을 실제(gemq/Gemini)에 맞게 일괄 정리 | `claude_cli.py`→`llm_cli.py`, `run_claude`→`run_llm`, `CLAUDE_BIN`→`GEMQ_BIN`, 주석·로그·문서의 "claude -p/Anthropic" 문구 갱신. 실제 백엔드는 2026-06 gemq로 이미 전환됐으나 이름이 claude로 남아 오진 소지 + `CLAUDE_BIN` 참조로 test_claude_cli 3건이 깨져 있었음(이번에 수정). 죽은 `ANTHROPIC_TRANSLATE_MODEL`/`ANTHROPIC_NEWS_MODEL` 상수 제거 |
+| 2026-07-23 | `com.cobling.canton-hub-restart` LaunchAgent 추가 (매일 05:00 백엔드 강제 재기동) + `price_collector` 에러 로깅 `{e}`→`{e!r}` | 백엔드 프로세스가 25일 넘게 떠 있는 동안 Mac sleep/wake 등으로 프로세스-레벨 네트워크 상태가 오염 → 매 사이클 새 httpx 클라이언트조차 전부 타임아웃 → 대시보드 전 지표(가격·24H·시총·거래량·Daily Burn)가 N/A. 프로세스가 크래시가 아니라 KeepAlive가 못 살림. 즉시 재기동으로 복구 + 주기적 재기동으로 rot 원천 차단. 로깅은 타임아웃류 예외의 빈 `str(e)` 때문에 25일간 원인 진단이 불가능했던 문제 수정 <br>⚠️ **2026-07-29 정정: 이 진단은 틀렸다.** "프로세스 노후화"가 아니라 아래 2026-07-29 항목의 DNS 스레드풀 고갈이 진짜 원인이었다. 그래서 매일 재기동이 효과가 없었다(재기동 30초 뒤 다시 포화). `{e!r}` 로깅 수정은 유효하며, 이번 진단의 결정적 단서가 됐다 |
+| 2026-07-29 | **Bybit 호출 전면 제거 + `collectors/net_guard.py`(호스트별 DNS 서킷 브레이커) 신설 + `UV_THREADPOOL_SIZE=64`** | 대시보드 전 지표가 다시 N/A(가격 차트는 07-25에서 4일 정지). 근본 원인은 `api.bybit.com`의 `getaddrinfo`가 **30초 행 후 gaierror**(한국망에서 이름이 막힘 — `dig`는 즉시 응답하고 CNAME 대상 CloudFront는 0.03초에 풀림). uvloop은 DNS를 **libuv 스레드풀(기본 4개)** 에 넘기는데, OS `getaddrinfo`는 취소 불가라 httpx 5초 타임아웃으로도 스레드를 되찾지 못한다. 5초마다 bybit을 3번(spot/perp/funding) 두드려 넣는 속도가 빠지는 속도(30초)를 앞질러 스레드풀이 영구 포화 → **프로세스 안의 모든 DNS가 굶어** CoinGecko·Kraken·CantonScan·stooq·Yahoo까지 전멸. 증거: 스택 샘플이 `uv__getaddrinfo_work→mdns_addrinfo`에 100% 고정, SYN_SENT 소켓 0개, CPU 3%, 새 프로세스는 정상. 재현 시 bybit 폴링만으로 CoinGecko 응답이 0.3초→5.0초로 붕괴 |
+| 2026-07-29 | CantonScan 스크래퍼: 렌더 대기 조건을 `REQUIRED_KEYS` 전체로 확대 + 저장을 덮어쓰기→merge(`_merge_and_save`) | Private TX 카드가 N/A. CantonScan이 KPI 렌더 순서를 뒤집어 Active Addresses가 2초 만에 먼저 뜨는데, 대기 루프가 그것만 보고 break → Private Updates는 라벨만 있고 값이 없는 반쪽 텍스트를 파싱. 게다가 그 반쪽 결과가 JSON 파일을 통째로 덮어써 직전 정상값(79.2%)까지 소실됐다. 파서를 순수 함수(`_parse_homepage_text`)로 분리해 테스트 가능하게 만듦 |

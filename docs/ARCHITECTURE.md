@@ -93,15 +93,18 @@ api/main.py
         ├── collectors/holders_collector.py      ─▶ CantonScan
         ├── collectors/kr_companies_collector.py ─▶ CantonScan party API
         ├── collectors/dex_oi_collector.py       ─▶ DEX REST
-        ├── collectors/realtime_prices.py        ─▶ 10 exchange REST
+        ├── collectors/realtime_prices.py        ─▶ 8 exchange REST
         ├── collectors/coingecko_scraper.py      ─▶ CoinGecko (Playwright)
-        └── collectors/funding_rates.py          ─▶ 7 perp 거래소 펀딩비 (DEX: Hyperliquid/Lighter/Extended/Aster, CEX: Binance/Bybit/OKX)
+        ├── collectors/funding_rates.py          ─▶ 6 perp 거래소 펀딩비 (DEX: Hyperliquid/Lighter/Extended/Aster, CEX: Binance/OKX)
+        └── collectors/net_guard.py              ─▶ (외부 호출 없음) 위 모든 수집기의 httpx 클라이언트를 감싸는
+                                                    호스트별 DNS/연결 서킷 브레이커
 ```
 
 | Rule | Enforcement |
 |------|-------------|
 | `api/routes/*` MUST NOT call collectors directly | Routes only read `cache.get(key)` |
 | `collectors/*` MUST NOT import from `api/` | One-way dependency |
+| 외부 HTTP는 `net_guard.make_client()`로만 생성 | 맨 `httpx.AsyncClient`는 막힌 호스트 하나가 프로세스 전체 DNS를 굶긴다 (2026-07-29) |
 | All HTTP I/O MUST be async (`httpx.AsyncClient`) | No `requests` library |
 | Cache writes only from scheduler loops | Routes are read-only |
 
@@ -242,3 +245,4 @@ api/main.py
 | 2026-05-30 | 피드 v2 반영: `tweet:items` 캐시 키 추가, `feed:{lang}` ai_summary 전용으로 변경, `/api/feed` 페이지네이션·트윗분류 문서화, `data/tweet_items.json` 링버퍼 기록 | feat/feed-v2-categorize-paginate |
 | 2026-05-31 | 펀딩비 매트릭스 반영: `analytics:funding-rates` 캐시 키, `GET /api/analytics/funding-rates`, `collectors/funding_rates.py` 모듈 추가 | feat/funding-rates |
 | 2026-06-03 | net APR: funding-rates 응답에 `spread_pct` join(체결 스프레드 차감 net APR·손익분기일·net 최대 페어 선택) | feat/funding-net-apr |
+| 2026-07-29 | `collectors/net_guard.py` 추가(호스트별 DNS/연결 서킷 브레이커) — 모든 수집기의 httpx 클라이언트가 이를 경유. Bybit 제거로 realtime_prices 8개소·funding_rates 6개소로 축소 | fix/dns-starvation |

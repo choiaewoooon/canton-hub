@@ -43,6 +43,16 @@
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>PYTHONUNBUFFERED</key>
         <string>1</string>
+
+        <!--
+          uvloop은 DNS(getaddrinfo)를 libuv 스레드풀에 넘기는데 기본 크기가 4다.
+          느리거나 막힌 호스트 하나가 4개를 다 잡으면 프로세스 안의 모든 DNS가
+          그 뒤에 굶는다 (2026-07-29 전체 마비 사고 — collectors/net_guard.py 참조).
+          OS getaddrinfo는 취소가 불가능해 httpx 타임아웃으로도 스레드를 되찾지 못한다.
+          net_guard가 1차 방어, 이 여유분이 2차 방어다.
+        -->
+        <key>UV_THREADPOOL_SIZE</key>
+        <string>64</string>
     </dict>
 
     <!-- Mac 부팅 시 자동 실행 -->
