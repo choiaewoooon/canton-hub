@@ -128,13 +128,15 @@ async def test_fetch_binance_funding_parses():
     assert fr.period_hours == 8
 
 
-@pytest.mark.asyncio
-async def test_fetch_bybit_funding_parses():
-    from collectors.funding_rates import fetch_bybit_funding
-    payload = {"result": {"list": [{"fundingRate": "-0.00045", "nextFundingTime": "1747310400000"}]}}
-    fr = await fetch_bybit_funding(_FakeClient(payload))
-    assert fr.source == "Bybit Perp"
-    assert fr.fr_apr == pytest.approx(-49.275, abs=0.01)
+def test_bybit_funding_is_gone():
+    """Bybit은 2026-07-29에 제거됐다 (collectors/net_guard.py docstring 참조).
+
+    한국망에서 api.bybit.com의 getaddrinfo가 30초 행이라 uvloop의 DNS 스레드풀을
+    포화시켜 다른 수집기까지 전부 죽였다. 무심코 되살리는 것을 막는다.
+    """
+    import collectors.funding_rates as m
+
+    assert not hasattr(m, "fetch_bybit_funding")
 
 
 @pytest.mark.asyncio
@@ -161,7 +163,6 @@ async def test_collect_all_skips_failures(monkeypatch):
     monkeypatch.setattr(m, "fetch_aster_funding", fail)
     monkeypatch.setattr(m, "fetch_extended_funding", fail)
     monkeypatch.setattr(m, "fetch_binance_funding", ok)
-    monkeypatch.setattr(m, "fetch_bybit_funding", fail)
     monkeypatch.setattr(m, "fetch_okx_funding", fail)
 
     rates = await m.collect_all_funding_rates()

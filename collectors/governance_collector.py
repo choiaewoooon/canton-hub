@@ -10,6 +10,8 @@ from pathlib import Path
 
 import httpx
 
+from . import net_guard
+
 logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
@@ -124,7 +126,7 @@ class GovernanceCollector:
         }
         if GITHUB_TOKEN:
             headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-        self.client = httpx.AsyncClient(timeout=20, headers=headers)
+        self.client = net_guard.make_client(timeout=20, headers=headers)
 
     async def collect(self) -> GovernanceData:
         try:

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from . import net_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -169,7 +171,7 @@ async def fetch_lighter_cc(client: httpx.AsyncClient) -> DexOI | None:
 
 async def collect_all_dex_oi() -> list[DexOI]:
     """모든 DEX에서 Canton (CC) OI 데이터 동시 수집."""
-    async with httpx.AsyncClient() as client:
+    async with net_guard.make_client() as client:
         results = await asyncio.gather(
             fetch_hyperliquid_cc(client),
             fetch_extended_cc(client),

@@ -15,6 +15,8 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
+from . import net_guard
+
 import config
 
 logger = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ class TwitterCollector:
     """RapidAPI Twttr API 기반 트위터 수집기"""
 
     def __init__(self):
-        self.client = httpx.AsyncClient(
+        self.client = net_guard.make_client(
             timeout=15,
             headers={
                 "x-rapidapi-host": RAPIDAPI_HOST,
