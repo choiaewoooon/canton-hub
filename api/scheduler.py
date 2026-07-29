@@ -371,7 +371,7 @@ async def collect_price(cache: TTLCache):
                 "market_cap": data.market_cap,
                 "total_volume_24h": data.total_volume_24h,
                 "circulating_supply": data.circulating_supply,
-            }, ttl=120)
+            }, ttl=360)
             logger.info(f"Price cached: ${data.current_price_usd}")
     except Exception as e:
         logger.error(f"Price collection failed: {e}")
@@ -1057,7 +1057,11 @@ async def start_scheduler(cache: TTLCache):
     asyncio.create_task(_deferred_initial(cache))
 
     # 주기적 재수집 태스크 등록
-    asyncio.create_task(_loop(collect_price, cache, 30, "price"))
+    # 60초 주기 + TTL 360초 = 실패해도 6회분 유예.
+    # COINGECKO_API_KEY가 비어 있어 키 없는 공개 등급(분당 한도 낮음)으로 호출하므로
+    # 30초 폴링은 재기동 직후 버스트에서 429를 유발했다. TTL을 함께 늘리지 않으면
+    # 주기만 늦추는 것이 오히려 N/A 위험을 키운다(만료 전 시도 횟수가 줄어서).
+    asyncio.create_task(_loop(collect_price, cache, 60, "price"))
     asyncio.create_task(_loop(collect_network, cache, 300, "network"))
     asyncio.create_task(_loop(collect_charts, cache, 900, "charts"))
     asyncio.create_task(_loop(collect_feed, cache, 14400, "feed"))  # 4시간 = 하루 6회 (gemq 트윗 분류)

@@ -55,6 +55,14 @@ class PriceCollector:
             data = await self._fetch_markets_data()
             if data.fetched:
                 return data
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                # 429에서 simple/price로 폴백하면 **같은 레이트리밋 버킷**을 한 번 더
+                # 두드려 호출량이 2배가 된다. 이미 막힌 상태에서 더 세게 미는 꼴이라
+                # 회복만 늦어진다. 미수집으로 반환하면 스케줄러가 직전 캐시를 유지한다.
+                logger.warning("CoinGecko 429 (레이트리밋) — 폴백 생략, 직전 캐시 유지")
+                return data
+            logger.warning(f"markets API 실패: {e!r}")
         except Exception as e:
             # {e!r} 사용: 타임아웃류 예외는 str(e)가 빈 문자열이라
             # "markets API 실패: " 만 남아 진단이 불가능했음 (2026-07 stale-process 사고)
