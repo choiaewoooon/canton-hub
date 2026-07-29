@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Canton Hub 백엔드 주기적 재기동 LaunchAgent
+
+  배경:
+    canton-hub-backend는 KeepAlive={Crashed:true, SuccessfulExit:false}로만
+    재시작된다. 즉 "크래시"하지 않은 채 살아있으면 절대 재기동되지 않는다.
+    장수명 프로세스가 "살아있지만 망가진" 상태로 수 주 방치될 수 있다는 뜻이다.
+
+  대책:
+    매일 05:00(로컬)에 백엔드만 강제 재기동(kickstart -k)하여 프로세스가
+    수 주씩 사는 것을 원천 차단한다. 재기동은 ~15초, data/ 파일 캐시가
+    그 사이 응답을 커버한다. 터널(tunnel)은 건드리지 않는다 — 재기동하면
+    공개 URL이 회전하고 Vercel 재배포가 트리거되기 때문.
+
+  ⚠️ 이 에이전트가 고치지 못하는 것 (2026-07-29 정정):
+    도입 당시 근거였던 "2026-07 전 지표 N/A 사고"의 원인은 프로세스 노후화가
+    아니었다. 막힌 호스트 하나(api.bybit.com)의 getaddrinfo가 uvloop의 libuv
+    DNS 스레드풀(기본 4개)을 고갈시켜 프로세스 안 모든 DNS를 굶긴 것이었다.
+    재기동 30초 뒤 다시 포화됐기 때문에 이 에이전트는 그 사고에 무력했다.
+    → 그 층의 진짜 대책은 collectors/net_guard.py(호스트별 서킷 브레이커)와
+      backend plist의 UV_THREADPOOL_SIZE다. 자세한 경위는 CLAUDE.md 체인지로그 참조.
+    이 에이전트는 "진짜 프로세스 rot"에 대한 일반 안전장치로서 유지한다.
+    전 지표가 동시에 N/A가 되면 재기동으로 때우지 말고 원인을 먼저 볼 것
+    (CLAUDE.md §4.1 진단 절차).
+
+  설치:
+    cp deploy/com.cobling.canton-hub-restart.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.cobling.canton-hub-restart.plist
+
+  로그:
+    /tmp/canton-hub-restart.log
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cobling.canton-hub-restart</string>
+
+    <!-- kickstart -k 는 KeepAlive와 무관하게 서비스를 죽였다 즉시 되살린다.
+         gui/501 = 사용자(choejaewon, uid 501) 도메인. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>/bin/launchctl kickstart -k gui/501/com.cobling.canton-hub-backend</string>
+    </array>
+
+    <!-- 매일 05:00 로컬 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>5</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/canton-hub-restart.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/canton-hub-restart.log</string>
+</dict>
+</plist>

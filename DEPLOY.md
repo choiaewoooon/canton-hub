@@ -49,8 +49,9 @@ This doc covers **canton-hub only**. The telegram bot is independent — see
 
 | Agent | Purpose |
 |---|---|
-| `com.cobling.canton-hub-backend` | `uvicorn api.main:app --port 8000`, `KeepAlive=true` |
+| `com.cobling.canton-hub-backend` | `uvicorn api.main:app --port 8000`, `KeepAlive={Crashed:true, SuccessfulExit:false}` — 크래시할 때만 재시작. 정상 실행 중인 프로세스는 절대 재기동 안 함. |
 | `com.cobling.canton-hub-tunnel`  | `scripts/run-tunnel.sh` — spawns `cloudflared tunnel --url http://localhost:8000`, detects the generated `*.trycloudflare.com` URL, and on change invokes `scripts/update-vercel-env.sh` to replace Vercel's `NEXT_PUBLIC_API_URL` + trigger a redeploy. |
+| `com.cobling.canton-hub-restart` | **매일 05:00 로컬**, `kickstart -k`로 백엔드만 강제 재기동. backend의 KeepAlive는 크래시하지 않는 한 재시작하지 않아 장수명 프로세스가 "살아있지만 망가진" 채 수 주 방치될 수 있는데, 이를 차단하는 일반 안전장치. 터널은 건드리지 않음(URL 회전 방지). <br>⚠️ **도입 근거였던 2026-07 전 지표 N/A 사고에는 무력했다** — 원인이 프로세스 노후화가 아니라 DNS 스레드풀 고갈이어서 재기동 30초 뒤 재포화됐다. 그 층의 대책은 `collectors/net_guard.py` + `UV_THREADPOOL_SIZE`. 전 지표 동시 N/A는 재기동으로 때우지 말고 CLAUDE.md §4.1 진단부터. |
 | `com.cobling.canton-bot`         | Telegram daily report (10:00 KST). Currently still targets `canton-bot/bot.py` (legacy). |
 
 The Canton Hub backend is the only long-running data collection service.
@@ -124,13 +125,34 @@ tail -f /tmp/canton-hub-backend.err.log
 
 ### A4. Applying code changes
 
-`KeepAlive=true` means the same Python process persists for days. After
-editing `api/scheduler.py` / `collectors/*.py` you MUST restart so imports
-pick up the new code:
+`KeepAlive={Crashed:true, SuccessfulExit:false}` means the same Python process
+persists for days. After editing `api/scheduler.py` / `collectors/*.py` you MUST
+restart so imports pick up the new code:
 
 ```bash
 launchctl kickstart -k gui/$(id -u)/com.cobling.canton-hub-backend
 ```
+
+**plist 자체를 고쳤다면 `kickstart`로는 부족하다.** launchd는 캐시한 job 정의를
+다시 읽지 않아 **환경변수 변경이 반영되지 않는다.** 반드시 unload/load 해야 한다:
+
+```bash
+launchctl bootout gui/$(id -u)/com.cobling.canton-hub-backend
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cobling.canton-hub-backend.plist
+```
+
+반영 확인: `ps -p <PID> -wwwE | tr ' ' '\n' | grep UV_THREADPOOL_SIZE`
+
+### A5. Backend plist 환경변수
+
+`.env`(python-dotenv)가 아니라 **plist의 `EnvironmentVariables`로만** 넣어야 하는 값들.
+프로세스 시작 시점에 고정되므로 런타임 변경이 불가능하다.
+
+| 변수 | 값 | 이유 |
+|---|---|---|
+| `PATH` | `/opt/homebrew/bin:...` | launchd는 최소 환경으로 뜬다 |
+| `PYTHONUNBUFFERED` | `1` | 로그 즉시 flush |
+| `UV_THREADPOOL_SIZE` | `64` | **uvloop이 DNS(`getaddrinfo`)를 넘기는 libuv 스레드풀 크기(기본 4).** 느리거나 막힌 호스트 하나가 4개를 다 잡으면 프로세스 안 모든 DNS가 굶는다. OS `getaddrinfo`는 취소 불가라 httpx 타임아웃으로도 스레드를 못 되찾는다. 1차 방어는 `collectors/net_guard.py`, 이건 2차 방어. (2026-07-29 전 지표 N/A 사고) |
 
 ---
 
